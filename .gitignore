@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Environment & local secrets
+.env
+.env.local
+
+# FinovaLabs runtime data & SEC cache (not committed)
+data/cache/sec/*
+!data/cache/sec/.gitkeep
+data/logs/
+data/reports/
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/finova_labs.db
+data/finova_labs.db-journal
+data/finova_labs.db-wal
+data/finova_labs.db-shm
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

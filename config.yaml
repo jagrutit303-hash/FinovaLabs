@@ -1,0 +1,34 @@
+# FinovaLabs configuration (thresholds and app settings)
+
+app:
+  name: "FinovaLabs"
+  tagline: "AI-Powered Financial Filing Auditor"
+  db_path: "data/finova_labs.db"
+  reports_dir: "data/reports"
+
+sec:
+  user_agent: "FinovaLabs contact@example.com"
+  cache_dir: "data/cache/sec"
+  request_timeout_seconds: 30
+  max_requests_per_second: 5
+
+confidence:
+  auto_approve_threshold: 0.90
+  review_required_threshold: 0.60
+  scoring_version: "1.0.0"
+  weights:
+    label_concept_match: 0.25
+    reporting_period_match: 0.25
+    unit_scale_correctness: 0.20
+    evidence_quality: 0.20
+    independent_path_agreement: 0.10
+
+validation:
+  accounting_identity_tolerance: 0.0005
+  segment_reconciliation_tolerance: 0.02
+  yoy_change_alert_threshold: 0.30
+
+logging:
+  level: "INFO"
+  log_dir: "data/logs"
+  file_name: "finova_labs.log"
