@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "description": "FinovaLabs AI-Powered Financial Filing Auditor",
   "scripts": {
-    "postinstall": "npm --prefix frontend install",
-    "install:frontend": "npm --prefix frontend install",
+    "postinstall": "npm --prefix frontend install --include=dev",
+    "install:frontend": "npm --prefix frontend install --include=dev",
     "dev": "npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173",
-    "build": "npm --prefix frontend run build",
+    "build": "npm --prefix frontend install --include=dev && npm --prefix frontend run build",
     "lint": "npm --prefix frontend run lint",
     "preview": "npm --prefix frontend run preview"
   }
