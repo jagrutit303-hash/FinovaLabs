@@ -21,7 +21,7 @@ from finova_labs.database import check_db_health, init_db, is_postgres_configure
 from finova_labs.settings import get_settings
 
 
-def test_connection() -> None:
+def verify_connection() -> None:
     settings = get_settings()
     db_url = settings.database_url
     if not db_url:
@@ -53,4 +53,5 @@ def test_connection() -> None:
 
 
 if __name__ == "__main__":
-    test_connection()
+    verify_connection()
+

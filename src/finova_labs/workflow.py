@@ -128,12 +128,12 @@ def build_workflow_idempotency_key(
 @contextmanager
 def _open_checkpointer(db_path: Path | str | None = None) -> Iterator[Any]:
     """Open and initialize LangGraph checkpointer (PostgresSaver when configured, else SQLite SqliteSaver)."""
-    if is_postgres_configured():
+    if is_postgres_configured(db_path):
         from langgraph.checkpoint.postgres import PostgresSaver
         from psycopg_pool import ConnectionPool
 
         db_url = get_settings().database_url
-        with ConnectionPool(conninfo=db_url, max_size=5, kwargs={"autocommit": True}) as pool:
+        with ConnectionPool(conninfo=db_url, min_size=1, max_size=5, kwargs={"autocommit": True}) as pool:
             checkpointer = PostgresSaver(pool)
             checkpointer.setup()
             yield checkpointer

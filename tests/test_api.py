@@ -27,17 +27,21 @@ from finova_labs.settings import ConfidenceSettings, get_settings
 def api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Provide a TestClient connected to an isolated test SQLite database with local SEC cache."""
     test_db = tmp_path / "test_api_finova.db"
+
+    import finova_labs.database as db_mod
+    import finova_labs.workflow as wf_mod
+    import finova_labs.evaluation as eval_mod
+    import backend.dependencies as deps_mod
+
+    monkeypatch.setattr(db_mod, "is_postgres_configured", lambda db_path=None: False)
+    monkeypatch.setattr(wf_mod, "is_postgres_configured", lambda db_path=None: False)
+
     init_db(test_db)
 
     settings = get_settings()
     settings.app.db_path = str(test_db)
     repo_cache = (Path(__file__).resolve().parent.parent / "data" / "cache" / "sec").resolve()
     settings.sec.cache_dir = str(repo_cache)
-
-    import finova_labs.database as db_mod
-    import finova_labs.workflow as wf_mod
-    import finova_labs.evaluation as eval_mod
-    import backend.dependencies as deps_mod
 
     monkeypatch.setattr(db_mod, "resolve_db_path", lambda db_path=None: Path(db_path) if db_path else test_db)
     monkeypatch.setattr(wf_mod, "get_settings", lambda: settings)

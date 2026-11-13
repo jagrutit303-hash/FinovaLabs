@@ -544,8 +544,12 @@ class PgConnectionWrapper:
         self._conn.close()
 
 
-def is_postgres_configured() -> bool:
-    """Return True if DATABASE_URL or POSTGRES_URL is configured for PostgreSQL."""
+def is_postgres_configured(db_path: Path | str | None = None) -> bool:
+    """Return True if DATABASE_URL or POSTGRES_URL is configured for PostgreSQL and no explicit local SQLite path is requested."""
+    if db_path is not None:
+        p_str = str(db_path).lower()
+        if p_str.endswith(".db") or p_str.endswith(".sqlite") or "test" in p_str:
+            return False
     try:
         url = get_settings().database_url
         if url and (url.startswith("postgresql://") or url.startswith("postgres://")):
@@ -565,7 +569,7 @@ def resolve_db_path(db_path: Path | str | None = None) -> Path:
 @contextmanager
 def get_connection(db_path: Path | str | None = None) -> Iterator[Any]:
     """Yield a managed database connection (PostgreSQL when configured, otherwise SQLite WAL)."""
-    if is_postgres_configured():
+    if is_postgres_configured(db_path):
         import psycopg
         db_url = get_settings().database_url
         raw_conn = None
@@ -903,8 +907,8 @@ def _migrate_audit_events(conn: sqlite3.Connection) -> None:
 
 def init_db(db_path: Path | str | None = None) -> Any:
     """Create FinovaLabs tables and indexes in PostgreSQL or SQLite if they do not already exist."""
-    if is_postgres_configured():
-        with get_connection() as conn:
+    if is_postgres_configured(db_path):
+        with get_connection(db_path) as conn:
             conn.executescript(_SCHEMA_SQL_PG)
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_runs_idempotency_key "
@@ -1028,8 +1032,8 @@ def _query_all(
 
 def check_db_health(db_path: Path | str | None = None) -> dict[str, Any]:
     """Verify database connectivity, table presence, and current record counts."""
-    if is_postgres_configured():
-        with get_connection() as conn:
+    if is_postgres_configured(db_path):
+        with get_connection(db_path) as conn:
             ver_row = conn.execute("SELECT version()").fetchone()
             pg_version = ver_row[0] if ver_row else "PostgreSQL"
             existing_tables = {

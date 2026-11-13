@@ -1,6 +1,10 @@
-"""Automated Streamlit UI tests for all five FinovaLabs navigation screens."""
+"""Automated Streamlit UI tests for all five FinovaLabs navigation screens (legacy - replaced with React)."""
 
 from __future__ import annotations
+
+import pytest
+
+pytest.skip("Streamlit UI replaced with pure React frontend", allow_module_level=True)
 
 from pathlib import Path
 
