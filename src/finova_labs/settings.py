@@ -113,6 +113,8 @@ class Settings(BaseModel):
 
     @property
     def db_file(self) -> Path:
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            return Path("/tmp/finova_labs.db")
         return self.resolve_path(self.app.db_path)
 
     @property
@@ -127,14 +129,20 @@ class Settings(BaseModel):
 
     @property
     def reports_path(self) -> Path:
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            return Path("/tmp/reports")
         return self.resolve_path(self.app.reports_dir)
 
     @property
     def cache_path(self) -> Path:
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            return Path("/tmp/cache/sec")
         return self.resolve_path(self.sec.cache_dir)
 
     @property
     def log_file(self) -> Path:
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            return Path("/tmp/finova_labs.log")
         return self.resolve_path(self.logging.log_dir) / self.logging.file_name
 
 
