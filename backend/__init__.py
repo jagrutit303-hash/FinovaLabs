@@ -1,0 +1,2 @@
+"""FinovaLabs FastAPI backend package."""
+

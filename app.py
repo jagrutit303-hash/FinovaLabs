@@ -5,9 +5,23 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-SRC_DIR = Path(__file__).resolve().parent / "src"
+REPO_ROOT = Path(__file__).resolve().parent
+SRC_DIR = REPO_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+# Top-level ASGI exports for Vercel Serverless Function entrypoint discovery
+try:
+    from backend.main import app as _fastapi_app
+    app = _fastapi_app
+    application = _fastapi_app
+    handler = _fastapi_app
+except Exception:
+    app = None
+    application = None
+    handler = None
 
 import streamlit as st
 
@@ -40,11 +54,11 @@ def main() -> None:
     safe_execute(_initialize_foundation, "application startup")
 
     page_specs = [
-        ("overview", render_overview_page, "Overview", ":material/space_dashboard:", True),
-        ("filing-analysis", render_filing_analysis_page, "Filing Analysis", ":material/analytics:", False),
-        ("human-review", render_human_review_page, "Human Review", ":material/fact_check:", False),
-        ("accuracy-report", render_accuracy_report_page, "Accuracy Report", ":material/verified:", False),
-        ("audit-trail", render_audit_trail_page, "Audit Trail", ":material/receipt_long:", False),
+        ("overview", render_overview_page, "1. Start & Audit Hub", ":material/space_dashboard:", True),
+        ("filing-analysis", render_filing_analysis_page, "2. Select Company & 10-K", ":material/analytics:", False),
+        ("human-review", render_human_review_page, "3. Resolve Human Reviews", ":material/fact_check:", False),
+        ("accuracy-report", render_accuracy_report_page, "4. Final SEC Report", ":material/verified:", False),
+        ("audit-trail", render_audit_trail_page, "5. Decision History", ":material/receipt_long:", False),
     ]
     pages = [
         st.Page(fn, title=title, icon=icon, url_path=url_path, default=is_default)
