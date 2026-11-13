@@ -12,9 +12,9 @@ if str(SRC_DIR) not in sys.path:
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.main import app
+from backend.main import app as _app
 
-# Export top-level ASGI handlers
-application = app
-handler = app
-
+# Top-level ASGI exports for Vercel Serverless Function discovery
+app = _app
+application = _app
+handler = _app
