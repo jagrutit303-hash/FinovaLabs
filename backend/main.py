@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request, status
@@ -114,12 +115,29 @@ app.include_router(reviews_router)
 app.include_router(settings_router)
 
 
-@app.get("/")
-def root():
-    return {
-        "service": "FinovaLabs API",
-        "version": "1.0.0",
-        "documentation": "/docs",
-        "health": "/api/health",
-    }
+# Serve compiled React frontend SPA if frontend/dist exists (e.g. Render, container, or standalone)
+dist_dir = (Path(__file__).resolve().parent.parent / "frontend" / "dist").resolve()
+if dist_dir.is_dir():
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse
+
+    assets_dir = dist_dir / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        target_file = dist_dir / full_path
+        if full_path and target_file.is_file():
+            return FileResponse(target_file)
+        return FileResponse(dist_dir / "index.html")
+else:
+    @app.get("/")
+    def root():
+        return {
+            "service": "FinovaLabs API",
+            "version": "1.0.0",
+            "documentation": "/docs",
+            "health": "/api/health",
+        }
 
