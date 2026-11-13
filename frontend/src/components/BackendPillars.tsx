@@ -114,19 +114,17 @@ export const BackendPillars: React.FC = () => {
               Run Complete Audits in Python Streamlit
             </h3>
             <p className="mt-1 text-xs text-slate-300 max-w-xl">
-              Launch the local Streamlit application anytime to execute live SEC Form 10-K extraction across Apple, Microsoft, Alphabet, Amazon, and Walmart.
+              Execute live SEC Form 10-K extraction, 5-factor confidence scoring, and accounting identity validation directly within the integrated workspace.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             <a
-              href="http://localhost:8501"
-              target="_blank"
-              rel="noreferrer"
+              href="/app/audits/new"
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-xs font-semibold text-white shadow-md hover:bg-blue-500 whitespace-nowrap cursor-pointer"
             >
               <Terminal className="h-4 w-4" />
-              <span>Open Streamlit (Port 8501)</span>
+              <span>Initiate Audit Run</span>
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>

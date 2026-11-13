@@ -25,6 +25,7 @@ class AppSettings(BaseModel):
     name: str = PRODUCT_NAME
     tagline: str = PRODUCT_TAGLINE
     db_path: str = "data/finova_labs.db"
+    database_url: str | None = None
     reports_dir: str = "data/reports"
 
 
@@ -113,6 +114,16 @@ class Settings(BaseModel):
     @property
     def db_file(self) -> Path:
         return self.resolve_path(self.app.db_path)
+
+    @property
+    def database_url(self) -> str | None:
+        """Return PostgreSQL connection URL if set in environment or config."""
+        return (
+            os.getenv("DATABASE_URL")
+            or os.getenv("POSTGRES_URL")
+            or os.getenv("FINOVALABS_DATABASE_URL")
+            or self.app.database_url
+        )
 
     @property
     def reports_path(self) -> Path:

@@ -17,12 +17,29 @@ logger = get_logger("ui")
 T = TypeVar("T")
 
 _LOGO_SVG = """
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
-  <rect width="40" height="40" rx="10" fill="#1D4ED8"/>
-  <path d="M10 29V11H28V15.5H15.2V18.6H25.2V22.9H15.2V29H10Z" fill="#FFFFFF"/>
-  <circle cx="29" cy="27" r="3.5" fill="#60A5FA"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" fill="none">
+  <rect x="0.75" y="0.75" width="34.5" height="34.5" rx="4" fill="#102136" stroke="#284263" stroke-width="1.5"/>
+  <rect x="8" y="9" width="3.5" height="18" rx="0.75" fill="#F7F6F2"/>
+  <rect x="14.5" y="9" width="13.5" height="3" rx="0.75" fill="#F7F6F2"/>
+  <rect x="14.5" y="16.5" width="10" height="3" rx="0.75" fill="#C9D3E0"/>
+  <rect x="14.5" y="24" width="6.5" height="3" rx="0.75" fill="#8EA2BC"/>
+  <rect x="24" y="22.5" width="4" height="4.5" rx="0.75" fill="#2F66C8"/>
 </svg>
 """.strip()
+
+_MARK_MINI_SVG = """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="16" height="16" fill="none" style="vertical-align:-2px;">
+  <rect x="1" y="1" width="18" height="18" rx="3" fill="#0C1B2E"/>
+  <rect x="4.5" y="4.5" width="2.2" height="11" fill="#FFFFFF"/>
+  <rect x="8.2" y="4.5" width="7.3" height="2" fill="#FFFFFF"/>
+  <rect x="8.2" y="9" width="5.3" height="2" fill="#CBD5E1"/>
+  <rect x="12.5" y="13" width="3" height="2.5" fill="#2F66C8"/>
+</svg>
+""".strip()
+
+# Public constants for branding assets
+LOGO_SVG = _LOGO_SVG
+MARK_MINI_SVG = _MARK_MINI_SVG
 
 _FAVICON_URI = (
     "data:image/svg+xml;base64,"
@@ -34,609 +51,969 @@ _TONE_CLASSES = {"success", "warning", "danger", "info", "neutral"}
 _ENTERPRISE_CSS = """
 <style>
   :root {
-    --fl-navy-950: #071324;
-    --fl-navy-900: #0B1E36;
-    --fl-navy-800: #122B4D;
-    --fl-blue-700: #1D4ED8;
-    --fl-blue-600: #2563EB;
-    --fl-blue-500: #3B82F6;
-    --fl-blue-300: #93C5FD;
-    --fl-blue-50: #EFF6FF;
-    --fl-slate-900: #0F172A;
-    --fl-slate-700: #334155;
-    --fl-slate-600: #475569;
-    --fl-slate-500: #475569;
-    --fl-border: #E2E8F0;
+    /* Institutional Financial Research Palette */
+    --fl-canvas: #F7F6F2;
     --fl-surface: #FFFFFF;
-    --fl-canvas: #F8FAFC;
+    --fl-surface-subtle: #F1EFE9;
+    --fl-sidebar-bg: #0C1A2B;
+    --fl-sidebar-surface: #13253B;
+    --fl-sidebar-border: #223854;
+
+    --fl-ink-900: #0C1B2E;
+    --fl-ink-700: #273447;
+    --fl-ink-600: #4A586B;
+    --fl-ink-500: #596779;
+
+    /* Single Restrained Cobalt Accent */
+    --fl-cobalt: #1E4B9A;
+    --fl-cobalt-hover: #163B7A;
+    --fl-cobalt-tint: #EEF3FA;
+    --fl-cobalt-border: #C5D4EC;
+
+    /* Muted Slate-Stone Hairlines */
+    --fl-border: #DDDAD2;
+    --fl-border-strong: #C5C1B6;
+
+    /* Accessible Semantic Status Tokens */
+    --fl-ok-ink: #0E5A3E;
+    --fl-ok-bg: #EDF6F1;
+    --fl-ok-bd: #B6DEC9;
+    --fl-warn-ink: #854D0E;
+    --fl-warn-bg: #FCF6E8;
+    --fl-warn-bd: #E8D29B;
+    --fl-err-ink: #8B1D1D;
+    --fl-err-bg: #FBF0F0;
+    --fl-err-bd: #E5BDBD;
+
+    /* Strict 8px Spacing Scale & Layout Grid */
+    --fl-sp-1: 8px;
+    --fl-sp-2: 16px;
+    --fl-sp-3: 24px;
+    --fl-sp-4: 32px;
+    --fl-sp-5: 40px;
+    --fl-sp-6: 48px;
+    --fl-sp-8: 64px;
+    --fl-radius-sm: 4px;
+    --fl-radius: 6px;
+    --fl-max-width: 1200px;
   }
 
   .stApp {
     background-color: var(--fl-canvas);
-    color: var(--fl-slate-900);
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--fl-ink-900);
+    font-family: "IBM Plex Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    max-width: 100%;
   }
 
-  .block-container {
-    padding-top: 1.15rem;
-    padding-bottom: 2rem;
-    max-width: 1280px;
+  .stApp *,
+  .stApp *::before,
+  .stApp *::after {
+    box-sizing: border-box;
   }
 
-  /* Deep navy enterprise sidebar */
+  [data-testid="stAppViewContainer"],
+  [data-testid="stMain"] {
+    max-width: 100%;
+    background-color: var(--fl-canvas);
+  }
+
+  header[data-testid="stHeader"] {
+    background-color: rgba(247, 246, 242, 0.92);
+    border-bottom: 1px solid var(--fl-border);
+  }
+
+  .block-container,
+  [data-testid="stMainBlockContainer"] {
+    padding: var(--fl-sp-8) var(--fl-sp-3) var(--fl-sp-4) var(--fl-sp-3) !important;
+    max-width: var(--fl-max-width) !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+  }
+
+  /* Prevent flex/grid children & long strings (URLs, accession numbers, quotes) from blowing out width */
+  [data-testid="stVerticalBlock"],
+  [data-testid="stColumn"] {
+    min-width: 0 !important;
+  }
+
+  [data-testid="stHorizontalBlock"] {
+    gap: var(--fl-sp-2);
+    align-items: stretch;
+  }
+
+  [data-testid="stMarkdownContainer"],
+  [data-testid="stMarkdownContainer"] p,
+  [data-testid="stMarkdownContainer"] li,
+  [data-testid="stMarkdownContainer"] a,
+  .fl-header-title,
+  .fl-header-subtitle,
+  .fl-card-title,
+  .fl-card-body,
+  .fl-kpi-value,
+  .fl-kpi-detail,
+  .fl-evidence-box,
+  .fl-next-box,
+  .fl-welcome-title,
+  .fl-welcome-body,
+  .fl-tour-title,
+  .fl-tour-body,
+  .fl-glossary-item,
+  .fl-error-box,
+  .fl-action-banner,
+  .fl-footer {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    min-width: 0;
+  }
+
+  [data-testid="stMarkdownContainer"] code,
+  [data-testid="stMarkdownContainer"] pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+  }
+
+  /* Restrained matte ink-navy sidebar (no gradients, no neon) */
   [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, var(--fl-navy-950) 0%, var(--fl-navy-900) 55%, var(--fl-navy-800) 100%);
-    border-right: 1px solid rgba(147, 197, 253, 0.16);
-    color: #E2E8F0;
+    background: var(--fl-sidebar-bg);
+    border-right: 1px solid var(--fl-sidebar-border);
+    color: #E2E6EC;
+    max-width: 100vw;
   }
 
   [data-testid="stSidebar"] p,
   [data-testid="stSidebar"] span,
   [data-testid="stSidebar"] label {
-    color: #E2E8F0;
+    color: #D7DEE8;
   }
 
   [data-testid="stSidebarNav"] {
-    padding-top: 0.25rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid rgba(147, 197, 253, 0.14);
-    margin-bottom: 0.9rem;
+    padding-top: var(--fl-sp-1);
+    padding-bottom: var(--fl-sp-2);
+    border-bottom: 1px solid var(--fl-sidebar-border);
+    margin-bottom: var(--fl-sp-2);
   }
 
   [data-testid="stSidebarNav"] a {
-    border-radius: 8px;
-    margin: 0.18rem 0.5rem;
-    padding: 0.48rem 0.75rem;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
-    border-left: 3px solid transparent;
+    border-radius: var(--fl-radius-sm);
+    margin: 2px var(--fl-sp-1);
+    padding: var(--fl-sp-1) var(--fl-sp-2);
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+    border-left: 2px solid transparent;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
   }
 
   [data-testid="stSidebarNav"] a:hover {
-    background-color: rgba(59, 130, 246, 0.16);
+    background-color: var(--fl-sidebar-surface);
   }
 
   [data-testid="stSidebarNav"] a[aria-current="page"] {
-    background-color: rgba(37, 99, 235, 0.28);
-    border-left: 3px solid #60A5FA;
+    background-color: var(--fl-sidebar-surface);
+    border-left: 2px solid #5B8CE0;
     font-weight: 600;
   }
 
   [data-testid="stSidebarNav"] span {
-    color: #F8FAFC !important;
-    font-size: 0.92rem;
+    color: #F4F6F9 !important;
+    font-size: 0.89rem;
+    white-space: normal;
+    line-height: 1.3;
+    letter-spacing: -0.005em;
   }
 
   [data-testid="stSidebarCollapseButton"] svg {
-    fill: #CBD5E1;
+    fill: #B8C4D4;
   }
 
-  /* Primary buttons styled for enterprise blue */
-  .stButton > button {
-    border-radius: 8px;
-    border: 1px solid #CBD5E1;
-    background-color: #FFFFFF;
-    color: var(--fl-navy-900);
+  /* Restrained institutional buttons with single cobalt accent & safe multi-line wrapping */
+  .stButton > button,
+  .stDownloadButton > button {
+    border-radius: var(--fl-radius-sm);
+    border: 1px solid var(--fl-border-strong);
+    background-color: var(--fl-surface);
+    color: var(--fl-ink-900);
     font-weight: 600;
-    font-size: 0.88rem;
-    padding: 0.45rem 0.95rem;
-    transition: all 0.15s ease;
+    font-size: 0.86rem;
+    padding: var(--fl-sp-1) var(--fl-sp-2);
+    min-height: 40px;
+    height: auto;
+    line-height: 1.3;
+    white-space: normal;
+    word-break: break-word;
+    max-width: 100%;
+    box-shadow: none;
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
   }
 
-  .stButton > button:hover {
-    border-color: var(--fl-blue-600);
-    color: var(--fl-blue-700);
-    background-color: var(--fl-blue-50);
+  .stButton > button:hover,
+  .stDownloadButton > button:hover {
+    border-color: var(--fl-cobalt);
+    color: var(--fl-cobalt);
+    background-color: var(--fl-cobalt-tint);
   }
 
   .stButton > button[kind="primary"] {
-    background-color: var(--fl-blue-700);
-    border-color: var(--fl-blue-700);
+    background-color: var(--fl-cobalt);
+    border-color: var(--fl-cobalt);
     color: #FFFFFF;
   }
 
   .stButton > button[kind="primary"]:hover {
-    background-color: #1E40AF;
-    border-color: #1E40AF;
+    background-color: var(--fl-cobalt-hover);
+    border-color: var(--fl-cobalt-hover);
     color: #FFFFFF;
+  }
+
+  /* Subtle institutional expanders & tabs */
+  [data-testid="stExpander"] {
+    background-color: var(--fl-surface);
+    border: 1px solid var(--fl-border) !important;
+    border-radius: var(--fl-radius) !important;
+    box-shadow: none !important;
+  }
+
+  [data-testid="stSidebar"] [data-testid="stExpander"] {
+    background-color: var(--fl-sidebar-surface);
+    border-color: var(--fl-sidebar-border) !important;
+  }
+
+  [data-baseweb="tab-list"] {
+    flex-wrap: wrap !important;
+    gap: var(--fl-sp-1);
+    height: auto !important;
+    border-bottom: 1px solid var(--fl-border);
+  }
+
+  [data-baseweb="tab"] {
+    height: auto !important;
+    min-height: 40px;
+    padding: var(--fl-sp-1) var(--fl-sp-2) !important;
+    white-space: normal !important;
+    font-weight: 600;
+  }
+
+  /* Viewport-bounded dialogs, popovers & select dropdowns */
+  [data-baseweb="popover"],
+  [data-baseweb="menu"],
+  [data-testid="stDialog"] [role="dialog"] {
+    max-width: calc(100vw - 32px) !important;
+    max-height: calc(100vh - 32px) !important;
+    overflow: auto;
+  }
+
+  [data-baseweb="menu"] li,
+  [data-baseweb="select"] span {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+
+  /* Plotly chart container responsiveness */
+  [data-testid="stPlotlyChart"],
+  [data-testid="stPlotlyChart"] > div,
+  .js-plotly-plot,
+  .plot-container {
+    max-width: 100% !important;
+    width: 100% !important;
   }
 
   .fl-sidebar-brand {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 0.85rem;
-    margin: 0.25rem 0 0.85rem 0;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(147, 197, 253, 0.18);
-    border-radius: 12px;
+    gap: var(--fl-sp-2);
+    padding: var(--fl-sp-2);
+    margin: var(--fl-sp-1) 0 var(--fl-sp-2) 0;
+    background: var(--fl-sidebar-surface);
+    border: 1px solid var(--fl-sidebar-border);
+    border-radius: var(--fl-radius);
   }
 
-  .fl-sidebar-brand-title {
-    font-size: 1.08rem;
+  .fl-wordmark {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    font-size: 1.02rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.15;
+  }
+
+  .fl-wm-primary {
     font-weight: 700;
-    letter-spacing: -0.01em;
     color: #FFFFFF !important;
-    line-height: 1.2;
+  }
+
+  .fl-wm-secondary {
+    font-weight: 400;
+    color: #B4C2D4 !important;
   }
 
   .fl-sidebar-brand-tag {
-    font-size: 0.74rem;
-    color: #93C5FD !important;
-    line-height: 1.3;
-    margin-top: 0.15rem;
+    font-size: 0.7rem;
+    color: #9FB0C5 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    line-height: 1.35;
+    margin-top: 4px;
   }
 
   .fl-sidebar-meta {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(191, 219, 254, 0.22);
-    border-radius: 10px;
-    padding: 0.72rem 0.85rem;
-    margin-top: 0.6rem;
-    font-size: 0.82rem;
+    background: var(--fl-sidebar-surface);
+    border: 1px solid var(--fl-sidebar-border);
+    border-radius: var(--fl-radius);
+    padding: var(--fl-sp-2);
+    margin-top: var(--fl-sp-1);
+    font-size: 0.81rem;
   }
 
   .fl-sidebar-meta-label {
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-size: 0.75rem;
-    color: #BFDBFE !important;
+    letter-spacing: 0.07em;
+    font-size: 0.7rem;
+    color: #9FB0C5 !important;
     font-weight: 600;
-    margin-bottom: 0.28rem;
+    margin-bottom: var(--fl-sp-1);
   }
 
   .fl-sidebar-meta-value {
-    color: #F8FAFC !important;
+    color: #F4F6F9 !important;
     font-weight: 500;
     line-height: 1.45;
   }
 
-  /* Compact enterprise compliance header */
+  /* Compact Editorial Page Masthead (no oversized gradient hero banner) */
   .fl-header {
-    background: linear-gradient(135deg, #0A192F 0%, #102A4C 68%, #163B6B 100%);
-    border: 1px solid #1E3A5F;
-    border-radius: 12px;
-    padding: 1.05rem 1.35rem;
-    margin-bottom: 0.9rem;
-    color: #FFFFFF;
-    box-shadow: 0 6px 18px rgba(10, 25, 47, 0.07);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--fl-border-strong);
+    border-radius: 0;
+    padding: 0 0 var(--fl-sp-2) 0;
+    margin-bottom: var(--fl-sp-2);
+    color: var(--fl-ink-900);
+    box-shadow: none;
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    align-items: center;
-    gap: 0.85rem;
+    align-items: flex-end;
+    gap: var(--fl-sp-2);
   }
 
   .fl-header-eyebrow {
-    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: var(--fl-sp-1);
+    font-size: 0.72rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #BFDBFE;
-    margin-bottom: 0.2rem;
+    letter-spacing: 0.09em;
+    color: var(--fl-cobalt);
+    margin-bottom: var(--fl-sp-1);
   }
 
   .fl-header-title {
-    font-size: 1.48rem;
+    font-size: 1.5rem;
     font-weight: 700;
-    letter-spacing: -0.02em;
-    color: #FFFFFF;
+    letter-spacing: -0.025em;
+    color: var(--fl-ink-900);
     margin: 0;
     line-height: 1.2;
   }
 
   .fl-header-subtitle {
-    font-size: 0.92rem;
-    color: #E2E8F0;
-    margin: 0.3rem 0 0 0;
-    max-width: 78ch;
-    line-height: 1.45;
+    font-size: 0.91rem;
+    color: var(--fl-ink-600);
+    margin: 6px 0 0 0;
+    max-width: 74ch;
+    line-height: 1.48;
   }
 
-  /* 7-stage compliance workflow progress indicator */
+  /* 7-stage Hairline Segmented Workflow Ribbon */
   .fl-stepper {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 0.42rem;
-    margin-bottom: 0.9rem;
+    gap: 0;
+    border-top: 1px solid var(--fl-border);
+    border-left: 1px solid var(--fl-border);
+    border-radius: var(--fl-radius);
+    overflow: hidden;
+    background: var(--fl-surface);
+    margin-bottom: var(--fl-sp-1);
   }
 
   .fl-step {
     background: var(--fl-surface);
-    border: 1px solid var(--fl-border);
-    border-radius: 9px;
-    padding: 0.46rem 0.56rem;
+    border-right: 1px solid var(--fl-border);
+    border-bottom: 1px solid var(--fl-border);
+    border-radius: 0;
+    padding: var(--fl-sp-1);
     font-size: 0.74rem;
-    color: var(--fl-slate-600);
+    color: var(--fl-ink-500);
     display: flex;
     flex-direction: column;
-    gap: 0.14rem;
-    line-height: 1.25;
+    justify-content: center;
+    gap: 4px;
+    line-height: 1.3;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .fl-step-active {
-    background: #EFF6FF;
-    border-color: #2563EB;
-    color: #1E3A8A;
+    background: var(--fl-cobalt-tint);
+    box-shadow: inset 0 2px 0 0 var(--fl-cobalt);
+    color: var(--fl-ink-900);
     font-weight: 600;
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
   }
 
   .fl-step-done {
-    background: #ECFDF5;
-    border-color: #6EE7B7;
-    color: #065F46;
+    background: var(--fl-ok-bg);
+    color: var(--fl-ok-ink);
   }
 
   .fl-step-alert {
-    background: #FFFBEB;
-    border-color: #FCD34D;
-    color: #92400E;
+    background: var(--fl-warn-bg);
+    color: var(--fl-warn-ink);
+  }
+
+  .fl-step-fail {
+    background: var(--fl-err-bg);
+    color: var(--fl-err-ink);
+  }
+
+  /* Compact 4-Category Hairline Audit Status Bar */
+  .fl-work-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--fl-border);
+    border: 1px solid var(--fl-border);
+    border-radius: var(--fl-radius);
+    overflow: hidden;
+    margin: 0 0 var(--fl-sp-2) 0;
+  }
+
+  .fl-work-pill {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--fl-sp-1);
+    padding: var(--fl-sp-1) var(--fl-sp-2);
+    border: none;
+    border-radius: 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: var(--fl-surface);
+    color: var(--fl-ink-700);
+    font-variant-numeric: tabular-nums lining-nums;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .fl-work-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--fl-sp-1);
+    min-width: 0;
+  }
+
+  .fl-work-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 1px;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  .fl-work-pill-pending {
+    background: var(--fl-warn-bg);
+    color: var(--fl-warn-ink);
+  }
+
+  .fl-work-pill-completed {
+    background: var(--fl-ok-bg);
+    color: var(--fl-ok-ink);
+  }
+
+  .fl-work-pill-failed {
+    background: var(--fl-err-bg);
+    color: var(--fl-err-ink);
+  }
+
+  .fl-work-pill-human {
+    background: var(--fl-cobalt-tint);
+    color: var(--fl-cobalt);
+  }
+
+  .fl-work-pill-muted {
+    background: var(--fl-surface);
+    color: var(--fl-ink-500);
+  }
+
+  /* Inline Contextual Glossary Guide */
+  .fl-glossary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(224px, 100%), 1fr));
+    gap: var(--fl-sp-2);
+    margin: var(--fl-sp-1) 0 var(--fl-sp-2) 0;
+  }
+
+  .fl-glossary-item {
+    background: var(--fl-surface-subtle);
+    border: 1px solid var(--fl-border);
+    border-left: 3px solid var(--fl-cobalt);
+    border-radius: var(--fl-radius-sm);
+    padding: var(--fl-sp-1) var(--fl-sp-2);
+    font-size: 0.81rem;
+    line-height: 1.45;
+    color: var(--fl-ink-700);
+  }
+
+  .fl-glossary-item strong {
+    color: var(--fl-ink-900);
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.82rem;
   }
 
   .fl-step-num {
     font-size: 0.69rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    opacity: 0.92;
+    opacity: 0.94;
     font-weight: 700;
   }
 
-  /* Beginner welcome, interactive tour & next-action callouts */
+  /* Restrained Welcome Brief, Tour Panel & Guidance Callout */
   .fl-welcome-card {
-    background: linear-gradient(135deg, #F8FBFF 0%, #EFF6FF 100%);
-    border: 1px solid #BFDBFE;
-    border-left: 4px solid #1D4ED8;
-    border-radius: 12px;
-    padding: 1rem 1.2rem;
-    margin-bottom: 0.85rem;
-    color: var(--fl-slate-900);
+    background: var(--fl-surface);
+    border: 1px solid var(--fl-border);
+    border-left: 3px solid var(--fl-cobalt);
+    border-radius: var(--fl-radius);
+    padding: var(--fl-sp-2) var(--fl-sp-3);
+    margin-bottom: var(--fl-sp-2);
+    color: var(--fl-ink-900);
   }
 
   .fl-welcome-title {
-    font-size: 1.04rem;
+    font-size: 1rem;
     font-weight: 700;
-    color: var(--fl-navy-900);
-    margin: 0 0 0.35rem 0;
+    color: var(--fl-ink-900);
+    letter-spacing: -0.01em;
+    margin: 0 0 var(--fl-sp-1) 0;
   }
 
   .fl-welcome-body {
     font-size: 0.88rem;
-    color: var(--fl-slate-700);
-    line-height: 1.5;
+    color: var(--fl-ink-700);
+    line-height: 1.55;
     margin: 0;
   }
 
   .fl-tour-card {
-    background: #0A192F;
-    border: 1px solid #1D4ED8;
-    border-radius: 12px;
-    padding: 0.95rem 1.2rem;
-    margin-bottom: 0.85rem;
-    color: #F8FAFC;
+    background: var(--fl-sidebar-bg);
+    border: 1px solid var(--fl-sidebar-border);
+    border-left: 3px solid var(--fl-cobalt);
+    border-radius: var(--fl-radius);
+    padding: var(--fl-sp-2) var(--fl-sp-3);
+    margin-bottom: var(--fl-sp-2);
+    color: #F4F6F9;
   }
 
   .fl-tour-eyebrow {
     font-size: 0.72rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: #93C5FD;
-    margin-bottom: 0.25rem;
+    letter-spacing: 0.08em;
+    color: #9EB8DD;
+    margin-bottom: 4px;
   }
 
   .fl-tour-title {
-    font-size: 1.02rem;
+    font-size: 1rem;
     font-weight: 700;
     color: #FFFFFF;
-    margin: 0 0 0.3rem 0;
+    margin: 0 0 var(--fl-sp-1) 0;
   }
 
   .fl-tour-body {
     font-size: 0.87rem;
-    color: #E2E8F0;
-    line-height: 1.5;
+    color: #D7DEE8;
+    line-height: 1.55;
     margin: 0;
   }
 
   .fl-next-box {
-    background: #F8FAFC;
+    background: var(--fl-surface);
     border: 1px solid var(--fl-border);
-    border-left: 4px solid #0284C7;
-    border-radius: 10px;
-    padding: 0.75rem 1rem;
-    margin-bottom: 0.85rem;
-    font-size: 0.86rem;
-    color: var(--fl-slate-800);
-    line-height: 1.48;
+    border-left: 3px solid var(--fl-cobalt);
+    border-radius: var(--fl-radius-sm);
+    padding: var(--fl-sp-2);
+    margin-bottom: var(--fl-sp-2);
+    font-size: 0.87rem;
+    color: var(--fl-ink-700);
+    line-height: 1.5;
   }
 
   .fl-tip {
     text-decoration: none;
-    border-bottom: 1px dotted #64748B;
+    border-bottom: 1px dotted var(--fl-ink-500);
     cursor: help;
   }
 
   .fl-sidebar-help-list {
-    margin: 0.25rem 0 0.55rem 1.05rem;
+    margin: var(--fl-sp-1) 0 var(--fl-sp-1) var(--fl-sp-2);
     padding: 0;
-    font-size: 0.8rem;
-    color: #E2E8F0 !important;
-    line-height: 1.48;
+    font-size: 0.79rem;
+    color: #D7DEE8 !important;
+    line-height: 1.5;
   }
 
   .fl-sidebar-help-list li {
-    margin-bottom: 0.28rem;
+    margin-bottom: 4px;
   }
 
-  /* Responsive KPI / Summary Cards */
+  /* Unified Institutional Summary Ledger Bar (replaces detached rounded KPI tile cards) */
   .fl-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    gap: 0.85rem;
-    margin-bottom: 1rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--fl-border);
+    border: 1px solid var(--fl-border);
+    border-radius: var(--fl-radius);
+    overflow: hidden;
+    margin-bottom: var(--fl-sp-2);
+    align-items: stretch;
   }
 
   .fl-card {
     background: var(--fl-surface);
     border: 1px solid var(--fl-border);
-    border-radius: 12px;
-    padding: 1.15rem 1.25rem;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    border-radius: var(--fl-radius);
+    padding: var(--fl-sp-2) var(--fl-sp-3);
+    box-shadow: none;
+    min-width: 0;
   }
 
-  .fl-card:hover {
-    border-color: #BFDBFE;
-    box-shadow: 0 4px 12px rgba(29, 78, 216, 0.06);
+  .fl-grid > .fl-card {
+    border: none;
+    border-radius: 0;
+    height: 100%;
+    min-height: 112px;
+    padding: var(--fl-sp-2);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .fl-info-card {
+    border-left: 3px solid var(--fl-cobalt);
+    margin-bottom: var(--fl-sp-2);
   }
 
   .fl-kpi-label {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--fl-slate-500);
-    margin-bottom: 0.42rem;
+    letter-spacing: 0.06em;
+    color: var(--fl-ink-500);
+    margin-bottom: var(--fl-sp-1);
   }
 
   .fl-kpi-value {
-    font-size: 1.48rem;
+    font-size: 1.42rem;
     font-weight: 700;
-    color: var(--fl-navy-900);
-    font-variant-numeric: tabular-nums;
+    color: var(--fl-ink-900);
+    font-variant-numeric: tabular-nums lining-nums;
+    letter-spacing: -0.02em;
     line-height: 1.2;
   }
 
   .fl-kpi-detail {
-    font-size: 0.83rem;
-    color: var(--fl-slate-500);
-    margin-top: 0.38rem;
+    font-size: 0.8rem;
+    color: var(--fl-ink-500);
+    margin-top: var(--fl-sp-1);
     line-height: 1.4;
   }
 
   .fl-card-header {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.6rem;
+    gap: var(--fl-sp-1);
+    margin-bottom: var(--fl-sp-1);
   }
 
   .fl-card-title {
-    font-size: 1.02rem;
-    font-weight: 600;
-    color: var(--fl-navy-900);
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: var(--fl-ink-900);
+    letter-spacing: -0.01em;
     margin: 0;
   }
 
   .fl-card-body {
-    font-size: 0.92rem;
-    color: var(--fl-slate-700);
+    font-size: 0.89rem;
+    color: var(--fl-ink-700);
     line-height: 1.55;
     margin: 0;
   }
 
   .fl-section-title {
-    font-size: 1.05rem;
+    font-size: 0.98rem;
     font-weight: 700;
-    color: var(--fl-navy-900);
-    letter-spacing: -0.01em;
-    margin: 1.25rem 0 0.7rem 0;
+    color: var(--fl-ink-900);
+    letter-spacing: -0.015em;
+    margin: var(--fl-sp-4) 0 var(--fl-sp-2) 0;
+    padding-bottom: var(--fl-sp-1);
+    border-bottom: 1px solid var(--fl-border);
   }
 
-  /* Realistic Empty State */
+  .fl-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--fl-sp-1);
+    padding-bottom: var(--fl-sp-1);
+    border-bottom: 1px solid var(--fl-border);
+  }
+
+  .fl-chart-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--fl-ink-900);
+    letter-spacing: -0.01em;
+    line-height: 1.35;
+  }
+
+  /* Restraint-first Empty State */
   .fl-empty {
     background: var(--fl-surface);
-    border: 1px dashed #CBD5E1;
-    border-radius: 12px;
-    padding: 2rem 1.5rem;
+    border: 1px solid var(--fl-border);
+    border-radius: var(--fl-radius);
+    padding: var(--fl-sp-4) var(--fl-sp-3);
     text-align: center;
-    margin-bottom: 1.25rem;
+    margin-bottom: var(--fl-sp-3);
   }
 
   .fl-empty-badge {
     display: inline-block;
-    padding: 0.25rem 0.7rem;
-    border-radius: 999px;
-    background: var(--fl-blue-50);
-    color: var(--fl-blue-700);
-    border: 1px solid #BFDBFE;
-    font-size: 0.74rem;
+    padding: 4px 8px;
+    border-radius: var(--fl-radius-sm);
+    background: var(--fl-cobalt-tint);
+    color: var(--fl-cobalt);
+    border: 1px solid var(--fl-cobalt-border);
+    font-size: 0.72rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.7rem;
+    letter-spacing: 0.06em;
+    margin-bottom: var(--fl-sp-1);
   }
 
   .fl-empty-title {
-    font-size: 1.06rem;
+    font-size: 1.04rem;
     font-weight: 700;
-    color: var(--fl-navy-900);
-    margin: 0 0 0.4rem 0;
+    color: var(--fl-ink-900);
+    margin: 0 0 var(--fl-sp-1) 0;
   }
 
   .fl-empty-desc {
-    font-size: 0.9rem;
-    color: var(--fl-slate-500);
+    font-size: 0.89rem;
+    color: var(--fl-ink-600);
     max-width: 58ch;
     margin: 0 auto;
     line-height: 1.55;
   }
 
   .fl-empty-next {
-    margin-top: 0.85rem;
-    font-size: 0.83rem;
-    color: var(--fl-slate-700);
-    font-weight: 500;
+    margin-top: var(--fl-sp-2);
+    font-size: 0.84rem;
+    color: var(--fl-ink-900);
+    font-weight: 600;
   }
 
   /* Clear Error Banner */
   .fl-error-box {
-    background: #FEF2F2;
-    border: 1px solid #FECACA;
-    border-left: 4px solid #DC2626;
-    border-radius: 10px;
-    padding: 1rem 1.2rem;
-    margin-bottom: 1rem;
-    color: #7F1D1D;
+    background: var(--fl-err-bg);
+    border: 1px solid var(--fl-err-bd);
+    border-left: 3px solid var(--fl-err-ink);
+    border-radius: var(--fl-radius-sm);
+    padding: var(--fl-sp-2);
+    margin-bottom: var(--fl-sp-2);
+    color: var(--fl-err-ink);
   }
 
   .fl-error-title {
     font-weight: 700;
-    font-size: 0.96rem;
-    margin-bottom: 0.25rem;
+    font-size: 0.94rem;
+    margin-bottom: 4px;
   }
 
   .fl-error-hint {
-    margin-top: 0.35rem;
-    font-size: 0.85rem;
-    color: #991B1B;
+    margin-top: var(--fl-sp-1);
+    font-size: 0.84rem;
+    color: var(--fl-err-ink);
   }
 
-  /* Semantic Status Badges */
+  /* Semantic Status Tags (flat institutional tags, no excessive rounding) */
   .fl-badge {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.24rem 0.68rem;
-    border-radius: 999px;
-    font-size: 0.76rem;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: var(--fl-radius-sm);
+    font-size: 0.74rem;
     font-weight: 600;
-    line-height: 1.2;
+    letter-spacing: 0.015em;
+    line-height: 1.25;
     white-space: nowrap;
+    max-width: 100%;
     border: 1px solid transparent;
   }
 
   .fl-badge-dot {
     width: 6px;
     height: 6px;
-    border-radius: 999px;
+    border-radius: 1px;
     background: currentColor;
+    flex-shrink: 0;
   }
 
   .fl-badge-success {
-    color: #047857;
-    background: #ECFDF5;
-    border-color: #A7F3D0;
+    color: var(--fl-ok-ink);
+    background: var(--fl-ok-bg);
+    border-color: var(--fl-ok-bd);
   }
 
   .fl-badge-warning {
-    color: #B45309;
-    background: #FFFBEB;
-    border-color: #FDE68A;
+    color: var(--fl-warn-ink);
+    background: var(--fl-warn-bg);
+    border-color: var(--fl-warn-bd);
   }
 
   .fl-badge-danger {
-    color: #B91C1C;
-    background: #FEF2F2;
-    border-color: #FECACA;
+    color: var(--fl-err-ink);
+    background: var(--fl-err-bg);
+    border-color: var(--fl-err-bd);
   }
 
   .fl-badge-info {
-    color: #1D4ED8;
-    background: #EFF6FF;
-    border-color: #BFDBFE;
+    color: var(--fl-cobalt);
+    background: var(--fl-cobalt-tint);
+    border-color: var(--fl-cobalt-border);
   }
 
   .fl-badge-neutral {
-    color: #475569;
-    background: #F1F5F9;
-    border-color: #CBD5E1;
+    color: var(--fl-ink-600);
+    background: var(--fl-surface-subtle);
+    border-color: var(--fl-border);
   }
 
-  /* Modern Responsive Table */
+  /* Aligned Financial Research Ledger Tables */
   .fl-table-wrap {
     background: var(--fl-surface);
     border: 1px solid var(--fl-border);
-    border-radius: 12px;
+    border-radius: var(--fl-radius);
     overflow-x: auto;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-    margin-bottom: 1.25rem;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    box-shadow: none;
+    margin-bottom: var(--fl-sp-3);
+  }
+
+  .fl-table-wrap::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .fl-table-wrap::-webkit-scrollbar-track {
+    background: var(--fl-surface-subtle);
+  }
+
+  .fl-table-wrap::-webkit-scrollbar-thumb {
+    background: var(--fl-border-strong);
+    border-radius: 3px;
   }
 
   .fl-table {
     width: 100%;
+    min-width: 680px;
     border-collapse: collapse;
-    font-size: 0.89rem;
+    font-size: 0.86rem;
     text-align: left;
   }
 
   .fl-table thead th {
-    background: #F1F5F9;
-    color: var(--fl-navy-900);
+    background: var(--fl-surface-subtle);
+    color: var(--fl-ink-900);
     font-weight: 600;
-    font-size: 0.76rem;
+    font-size: 0.73rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    padding: 0.78rem 1rem;
-    border-bottom: 1px solid var(--fl-border);
-    white-space: nowrap;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--fl-border-strong);
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    line-height: 1.35;
+    vertical-align: middle;
   }
 
   .fl-table tbody td {
-    padding: 0.72rem 0.9rem;
-    border-bottom: 1px solid #F1F5F9;
-    color: var(--fl-slate-700);
+    padding: 10px 14px;
+    border-bottom: 1px solid #ECEAE3;
+    color: var(--fl-ink-700);
     vertical-align: middle;
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums lining-nums;
+    white-space: nowrap;
+  }
+
+  .fl-table thead th:first-child,
+  .fl-table tbody td:first-child {
+    font-weight: 600;
+    color: var(--fl-ink-900);
   }
 
   .fl-table tbody td.fl-num,
   .fl-table thead th.fl-num {
     text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums lining-nums;
   }
 
   .fl-evidence-box {
-    background: #F8FAFC;
-    border: 1px solid #CBD5E1;
-    border-left: 4px solid #1D4ED8;
-    border-radius: 8px;
-    padding: 0.75rem 0.9rem;
-    font-size: 0.87rem;
-    color: var(--fl-slate-900);
+    background: var(--fl-surface-subtle);
+    border: 1px solid var(--fl-border);
+    border-left: 3px solid var(--fl-cobalt);
+    border-radius: var(--fl-radius-sm);
+    padding: var(--fl-sp-2);
+    font-size: 0.86rem;
+    color: var(--fl-ink-900);
     line-height: 1.5;
-    margin-top: 0.4rem;
+    margin-top: var(--fl-sp-1);
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .fl-action-banner {
-    background: #FFFFFF;
-    border: 1px solid #BFDBFE;
-    border-left: 4px solid #1D4ED8;
-    border-radius: 10px;
-    padding: 0.85rem 1.05rem;
-    margin-bottom: 0.85rem;
+    background: var(--fl-surface);
+    border: 1px solid var(--fl-cobalt-border);
+    border-left: 3px solid var(--fl-cobalt);
+    border-radius: var(--fl-radius);
+    padding: var(--fl-sp-2);
+    margin-bottom: var(--fl-sp-2);
   }
 
   .fl-action-banner-warning {
-    border-color: #FCD34D;
-    border-left-color: #D97706;
-    background: #FFFDF5;
+    border-color: var(--fl-warn-bd);
+    border-left-color: var(--fl-warn-ink);
+    background: var(--fl-warn-bg);
   }
 
   .fl-action-banner-success {
-    border-color: #A7F3D0;
-    border-left-color: #059669;
-    background: #F6FEF9;
+    border-color: var(--fl-ok-bd);
+    border-left-color: var(--fl-ok-ink);
+    background: var(--fl-ok-bg);
   }
 
   .fl-table tbody tr:last-child td {
@@ -644,41 +1021,108 @@ _ENTERPRISE_CSS = """
   }
 
   .fl-table tbody tr:hover {
-    background: #F8FAFC;
+    background: #FAF9F5;
   }
 
   .fl-footer {
-    margin-top: 1.5rem;
-    padding-top: 0.85rem;
-    border-top: 1px solid var(--fl-border);
+    margin-top: var(--fl-sp-4);
+    padding-top: var(--fl-sp-2);
+    border-top: 1px solid var(--fl-border-strong);
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    gap: 0.5rem;
-    font-size: 0.8rem;
-    color: var(--fl-slate-600);
+    gap: var(--fl-sp-1);
+    font-size: 0.78rem;
+    color: var(--fl-ink-500);
   }
 
-  @media (max-width: 1180px) {
+  /* Breakpoints tuned for 1440 / 1280 / 1024 / 768 tablet / 390 mobile */
+  @media (max-width: 1200px) {
     .fl-stepper {
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .fl-work-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 1080px) {
+    .block-container,
+    [data-testid="stMainBlockContainer"] {
+      padding: var(--fl-sp-8) var(--fl-sp-2) var(--fl-sp-3) var(--fl-sp-2) !important;
+    }
+    .fl-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    [data-testid="stHorizontalBlock"] {
+      flex-wrap: wrap !important;
+      gap: var(--fl-sp-2) !important;
+    }
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+      flex: 1 1 240px !important;
+      min-width: min(240px, 100%) !important;
+      width: auto !important;
+    }
+    [data-testid="stColumn"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+      flex: 1 1 120px !important;
+      min-width: min(120px, 100%) !important;
     }
   }
 
   @media (max-width: 768px) {
-    .block-container {
-      padding-top: 0.9rem;
-      padding-left: 0.9rem;
-      padding-right: 0.9rem;
+    .block-container,
+    [data-testid="stMainBlockContainer"] {
+      padding: var(--fl-sp-8) var(--fl-sp-2) var(--fl-sp-3) var(--fl-sp-2) !important;
+    }
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+    [data-testid="stColumn"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+      flex: 1 1 100% !important;
+      width: 100% !important;
+      min-width: 100% !important;
+      max-width: 100% !important;
+    }
+    .fl-stepper {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .fl-work-strip,
+    .fl-grid,
+    .fl-glossary-grid {
+      grid-template-columns: 1fr;
+    }
+    .fl-grid > .fl-card {
+      min-height: 0;
+    }
+    .fl-header {
+      padding: 0 0 var(--fl-sp-2) 0;
+    }
+    .fl-header-title {
+      font-size: 1.3rem;
+    }
+    .fl-card {
+      padding: var(--fl-sp-2);
+    }
+    .fl-empty {
+      padding: var(--fl-sp-3) var(--fl-sp-2);
+    }
+  }
+
+  @media (max-width: 540px) {
+    .block-container,
+    [data-testid="stMainBlockContainer"] {
+      padding: var(--fl-sp-8) var(--fl-sp-1) var(--fl-sp-3) var(--fl-sp-1) !important;
     }
     .fl-stepper {
       grid-template-columns: 1fr;
     }
-    .fl-header {
-      padding: 0.95rem 1rem;
+    .fl-kpi-value {
+      font-size: 1.28rem;
     }
-    .fl-header-title {
-      font-size: 1.32rem;
+    .fl-table {
+      font-size: 0.82rem;
+    }
+    .fl-table thead th,
+    .fl-table tbody td {
+      padding: var(--fl-sp-1);
     }
   }
 </style>
@@ -702,26 +1146,29 @@ def configure_page(section_title: str | None = None) -> None:
 
 _STATUS_LABELS: dict[str, str] = {
     "AUTO_APPROVED": "Auto-Approved",
-    "APPROVED": "Approved",
-    "CORRECTED": "Corrected",
-    "EDITED": "Corrected",
-    "REVIEW_REQUIRED": "Needs Review",
-    "PAUSED_FOR_REVIEW": "Paused for Review",
+    "APPROVED": "Analyst Approved",
+    "CORRECTED": "Analyst Corrected",
+    "EDITED": "Analyst Corrected",
+    "REVIEW_REQUIRED": "Pending Review",
+    "PAUSED_FOR_REVIEW": "Pending Review",
     "COMPLETED_WITH_REJECTIONS": "Completed (With Rejections)",
     "COMPLETED": "Completed",
-    "INTERRUPTED": "Interrupted",
-    "RUNNING": "Running",
+    "INTERRUPTED": "Paused (Saved)",
+    "RUNNING": "In Progress",
     "PENDING": "Pending",
-    "FAILED": "Failed",
-    "OPEN": "Pending",
-    "REJECTED": "Rejected",
+    "FAILED": "Failed Check",
+    "FAIL": "Failed Check",
+    "WARNING": "Alert / Check",
+    "PASS": "Passed",
+    "OPEN": "Pending Review",
+    "REJECTED": "Analyst Rejected",
     "EXTRACTED": "Extracted",
-    "AMBIGUOUS": "Ambiguous",
-    "MISSING": "Missing",
+    "AMBIGUOUS": "Needs Clarification",
+    "MISSING": "Missing in Filing",
     "RETRIEVED": "Retrieved",
     "EXACT_MATCH": "Exact Match",
     "MATCH_FOUND": "Matched",
-    "MISMATCH": "Mismatch",
+    "MISMATCH": "Failed Match",
     "UNMATCHED_RECORD": "Unmatched",
     "PERIOD_MISMATCH": "Period Mismatch",
     "UNIT_MISMATCH": "Unit Mismatch",
@@ -732,7 +1179,7 @@ _STATUS_LABELS: dict[str, str] = {
 
 
 def humanize_status(status: str | None) -> str:
-    """Convert internal snake-case/enum tokens into scannable compliance labels."""
+    """Convert internal enum tokens into plain-English financial audit labels."""
     if not status:
         return "—"
     cleaned = str(status).strip()
@@ -749,30 +1196,30 @@ def status_badge(label: str, tone: str = "info") -> str:
 
 
 TOOLTIP_CONFIDENCE = (
-    "Confidence Score (0%-100%): 5-factor weighted rating across Label/Concept Match (25%), "
-    "Reporting Period Match (25%), Unit & Scale Correctness (20%), Evidence Quality (20%), "
-    "and Independent-Path Agreement (10%). Metrics below 90% escalate automatically to Human Review."
+    "Confidence Score (0%–100%): Certainty rating across 5 plain checks — Line-Item Match (25%), "
+    "Fiscal Period Match (25%), Unit & Scale Accuracy (20%), Supporting 10-K Quote (20%), and "
+    "Cross-Check Agreement (10%). Anything below 90% pauses automatically for analyst sign-off."
 )
 TOOLTIP_EVIDENCE = (
-    "Evidence: Verbatim text snippet, table/section location in the Form 10-K HTML, "
-    "matched us-gaap XBRL concept, and official SEC EDGAR source URL."
+    "Evidence: Exact sentence or table line quoted directly from the company's SEC 10-K filing, "
+    "along with the table location and official SEC EDGAR filing link."
 )
 TOOLTIP_PERIOD = (
-    "Reporting Period: Annual Form 10-K duration (FY start -> end date) or balance-sheet instant date. "
-    "Quarterly and mismatched dates are rejected before comparison."
+    "Reporting Period: Full fiscal year date range (for revenue, income, cash flow, EPS) or fiscal "
+    "year-end balance-sheet date. Quarterly or partial-year numbers are never mixed in."
 )
 TOOLTIP_UNIT = (
-    "Units & Scale: Normalized currency/share unit (USD or USD/shares) plus reported table multiplier "
-    "(1x, 1,000x, 1,000,000x) detected from Inline XBRL scale attributes and statement headers."
+    "Units & Scale: Standardized to full U.S. Dollars (USD) or Dollars per Share (USD/shares) from "
+    "the 10-K statement multiplier (such as 'in millions' or 'in thousands')."
 )
 TOOLTIP_VALIDATION = (
-    "Validation Status: Deterministic accounting check result (Pass, Warning, Fail, or Not Applicable) "
-    "covering Assets = Liabilities + Equity, Segment Revenue reconciliation, and ±30% YoY change alerts. "
-    "Any Fail pauses the workflow for Human Review even at 100% confidence."
+    "Validation Check: Accounting verification (Passed, Alert, Failed Check, or Not Applicable) "
+    "covering Balance Sheet balance (Assets = Liabilities + Equity), Segment Revenue totals, and "
+    "year-over-year changes above ±30%. Any Failed Check stops for analyst review."
 )
 TOOLTIP_CHECKPOINT = (
-    "Workflow Checkpoint: Durable SQLite state saved after retrieval, extraction, scoring/validation, "
-    "and human review so restarts resume safely without duplicating completed stages."
+    "Saved Audit Progress: FinovaLabs automatically saves completed work at every stage so closing "
+    "your browser or restarting never loses decisions or repeats finished steps."
 )
 
 FIELD_TOOLTIPS: dict[str, str] = {
@@ -780,14 +1227,17 @@ FIELD_TOOLTIPS: dict[str, str] = {
     "Confidence Score": TOOLTIP_CONFIDENCE,
     "Evidence": TOOLTIP_EVIDENCE,
     "Citation": TOOLTIP_EVIDENCE,
+    "10-K Quote": TOOLTIP_EVIDENCE,
     "Period": TOOLTIP_PERIOD,
     "Reporting Period": TOOLTIP_PERIOD,
     "Unit": TOOLTIP_UNIT,
     "Unit & Scale": TOOLTIP_UNIT,
     "Validation": TOOLTIP_VALIDATION,
     "Validation Status": TOOLTIP_VALIDATION,
+    "Accounting Check": TOOLTIP_VALIDATION,
     "Rule": TOOLTIP_VALIDATION,
     "Last Checkpoint": TOOLTIP_CHECKPOINT,
+    "Saved Step": TOOLTIP_CHECKPOINT,
     "Stage": TOOLTIP_CHECKPOINT,
 }
 
@@ -796,87 +1246,84 @@ _TOUR_SCREENS: tuple[dict[str, str], ...] = (
         "title": "Overview",
         "url_path": "overview",
         "purpose": (
-            "Your command center showing live SQLite counts for retrieved companies/filings, "
-            "auto-approved metrics, open human escalations, SEC benchmark accuracy, and resumable checkpoints."
+            "Your Audit Hub showing at a glance what is pending review, what is completed, any failed "
+            "accounting checks, human analyst decisions, and saved work ready to continue."
         ),
         "action": (
-            "Inspect the Recommended Next Action card, check Saved Workflows & Restart Recovery for any "
-            "interrupted or paused runs, or run Verify DB Health."
+            "Check the 'Recommended Next Step' box at the top, or click 'Continue' if an interrupted "
+            "audit is waiting."
         ),
         "expect": (
-            "Real portfolio metrics, a 90%-cutoff confidence bar chart, and one-click Resume Workflow buttons "
-            "when saved checkpoints are cleared to continue."
+            "A clear picture of portfolio audit progress and one direct button taking you to your next task."
         ),
     },
     {
         "title": "Filing Analysis",
         "url_path": "filing-analysis",
         "purpose": (
-            "Retrieves real Form 10-K filings from SEC EDGAR (AAPL, MSFT, GOOGL, AMZN, WMT), extracts 8 core "
-            "annual metrics, scores 5-factor confidence, and runs deterministic financial validations."
+            "Lets you pick a supported public company (Apple, Microsoft, Alphabet, Amazon, or Walmart), "
+            "download its official SEC Form 10-K, extract 8 core financial figures, and inspect proof & checks."
         ),
         "action": (
-            "Select companies and click 'Retrieve Latest 10-K Filings', then pick a retrieved filing and click "
-            "'Extract 8 Core Financial Metrics'."
+            "Follow Step 1 (Retrieve 10-K) then Step 2 (Extract 8 Core Financial Metrics) to gather "
+            "figures and run accounting checks."
         ),
         "expect": (
-            "Normalized USD and per-share values saved to SQLite with verbatim filing HTML citations, "
-            "5-factor confidence tables, and Accounting Equation / Segment / YoY validation statuses."
+            "Standardized USD and EPS figures with 10-K quotes, certainty ratings, and Balance Sheet / "
+            "Segment / Year-over-Year check results."
         ),
     },
     {
         "title": "Human Review",
         "url_path": "human-review",
         "purpose": (
-            "Resolves exceptions whenever an extracted metric has low confidence (<90%), ambiguity, or a failed "
-            "financial validation rule that pauses the LangGraph checkpoint."
+            "Brings every flagged item to the top whenever certainty is under 90%, a figure is missing, "
+            "or an accounting check fails so an analyst can verify it against the filing."
         ),
         "action": (
-            "Compare the extracted figure side-by-side against the filing citation, enter a justification note "
-            "if correcting or rejecting, and click Approve, Correct Value, or Reject."
+            "Read the side-by-side 10-K quote, enter a short review note if correcting or rejecting, "
+            "and click Approve, Correct Value, or Reject."
         ),
         "expect": (
-            "Your decision commits atomically with an append-only SHA-256 audit event while permanently preserving "
-            "the original extracted number, and unblocked workflows resume cleanly."
+            "Your decision is permanently recorded while preserving the original extracted figure, and "
+            "the audit advances cleanly."
         ),
     },
     {
         "title": "Accuracy Report",
         "url_path": "accuracy-report",
         "purpose": (
-            "Benchmarks both raw automated extraction (Pre-Review) and final accepted/edited outputs (Post-Review) "
-            "against official SEC EDGAR Company Facts XBRL ground truth."
+            "Compares both the initial automated numbers and your final analyst-reviewed numbers against "
+            "official SEC financial filings to verify reporting accuracy."
         ),
         "action": (
-            "Select an audit run (or All Audit Runs) and click 'Evaluate vs. SEC Facts' to run strict "
-            "company CIK, US-GAAP concept, FY annual period, and unit matching."
+            "Select a company audit (or All Audit Runs) and click 'Evaluate vs. SEC Facts', then "
+            "download your CSV or JSON summary report."
         ),
         "expect": (
-            "Separate Pre-Review vs. Post-Review accuracy and coverage denominators, interactive company/metric "
-            "charts, provenance explanations, and downloadable FinovaLabs CSV/JSON reports."
+            "Clear before-and-after accuracy percentages, company & metric charts, and downloadable reports."
         ),
     },
     {
         "title": "Audit Trail",
         "url_path": "audit-trail",
         "purpose": (
-            "Provides a chronological, append-only ledger of human decisions and workflow milestones linked by "
-            "sequential record IDs and SHA-256 hash chaining (tamper-evident, not absolutely tamper-proof)."
+            "Provides a permanent, chronological Decision History of every analyst approval, edit, rejection, "
+            "and audit milestone, protected by tamper-evident record linking."
         ),
         "action": (
-            "Filter by Company, UTC Date, Decision, Metric, or Workflow ID, toggle low-level telemetry if desired, "
-            "and click 'Re-Verify Audit Hash Chain' or 'Download Audit Ledger JSON'."
+            "Filter by Company, Date, Decision, or Metric, review Original vs. Corrected values, and verify "
+            "or export the audit record."
         ),
         "expect": (
-            "Immediate cryptographic integrity confirmation showing zero gaps or altered records, side-by-side "
-            "Original vs. Corrected decision history, and full JSON ledger export."
+            "Confirmed record integrity with every analyst justification, timestamp, and before/after value intact."
         ),
     },
 )
 
 
 def reset_ui_session_state() -> None:
-    """Safely reset browser UI/tour session preferences without deleting SQLite data."""
+    """Safely reset browser UI/tour session preferences without deleting saved audit records."""
     keys_to_clear = (
         "fl_welcome_dismissed",
         "fl_tour_active",
@@ -892,60 +1339,72 @@ def reset_ui_session_state() -> None:
         st.session_state.pop(k, None)
 
 
+def _compact_html(raw: str) -> str:
+    """Collapse HTML onto one space-joined line so CommonMark never emits code blocks or drops word spaces."""
+    return " ".join(line.strip() for line in raw.splitlines() if line.strip())
+
+
 def apply_design_system(
     active_section: str,
-    db_status_label: str = "SQLite Connected",
+    db_status_label: str = "Audit Store Ready",
     context_summary: str | None = None,
 ) -> None:
     """Inject enterprise CSS, sidebar context, and persistent 'How to use FinovaLabs' help."""
     st.markdown(_ENTERPRISE_CSS, unsafe_allow_html=True)
     ctx_html = (
-        f"""
-        <div class="fl-sidebar-meta">
-          <div class="fl-sidebar-meta-label">Workspace Context</div>
-          <div class="fl-sidebar-meta-value">{escape(context_summary)}</div>
-        </div>
-        """
+        _compact_html(
+            f"""
+            <div class="fl-sidebar-meta">
+              <div class="fl-sidebar-meta-label">Active Audit Context</div>
+              <div class="fl-sidebar-meta-value">{escape(context_summary)}</div>
+            </div>
+            """
+        )
         if context_summary
         else ""
     )
+    logo_svg = globals().get("_LOGO_SVG") or globals().get("LOGO_SVG") or _LOGO_SVG
     with st.sidebar:
         st.markdown(
-            f"""
-            <div class="fl-sidebar-brand">
-              <div style="width:36px;height:36px;flex-shrink:0;">{_LOGO_SVG}</div>
-              <div>
-                <div class="fl-sidebar-brand-title">{escape(PRODUCT_NAME)}</div>
-                <div class="fl-sidebar-brand-tag">{escape(PRODUCT_TAGLINE)}</div>
-              </div>
-            </div>
-            {ctx_html}
-            <div class="fl-sidebar-meta">
-              <div class="fl-sidebar-meta-label">Database Status</div>
-              <div class="fl-sidebar-meta-value">{escape(db_status_label)}</div>
-            </div>
-            """,
+            _compact_html(
+                f"""
+                <div class="fl-sidebar-brand">
+                  <div style="width:36px;height:36px;flex-shrink:0;">{logo_svg}</div>
+                  <div>
+                    <div class="fl-wordmark"><span class="fl-wm-primary">FINOVA</span><span class="fl-wm-secondary">LABS</span></div>
+                    <div class="fl-sidebar-brand-tag">SEC 10-K Research &amp; Audit</div>
+                  </div>
+                </div>
+                {ctx_html}
+                <div class="fl-sidebar-meta">
+                  <div class="fl-sidebar-meta-label">Audit Record Store</div>
+                  <div class="fl-sidebar-meta-value">{escape(db_status_label)}</div>
+                </div>
+                """
+            ),
             unsafe_allow_html=True,
         )
         with st.expander("How to use FinovaLabs", expanded=False):
             st.markdown(
-                """
-                <ol class="fl-sidebar-help-list">
-                  <li><strong>Select company:</strong> Pick tickers in Filing Analysis.</li>
-                  <li><strong>Retrieve 10-K:</strong> Fetch live SEC metadata &amp; Company Facts.</li>
-                  <li><strong>Extract metrics:</strong> Extract 8 core annual metrics with citations.</li>
-                  <li><strong>Validate:</strong> Score 5-factor confidence (&ge;90%) &amp; financial rules.</li>
-                  <li><strong>Review exceptions:</strong> Resolve paused items in Human Review.</li>
-                  <li><strong>Compare with SEC facts:</strong> Run pre/post Accuracy Report.</li>
-                  <li><strong>View audit report:</strong> Verify SHA-256 history in Audit Trail.</li>
-                </ol>
-                """,
+                _compact_html(
+                    """
+                    <ol class="fl-sidebar-help-list">
+                      <li><strong>Select company:</strong> Pick Apple, Microsoft, Alphabet, Amazon, or Walmart.</li>
+                      <li><strong>Retrieve 10-K:</strong> Pull the official SEC annual filing &amp; financial facts.</li>
+                      <li><strong>Extract metrics:</strong> Gather 8 key financial figures with exact 10-K quotes.</li>
+                      <li><strong>Validate:</strong> Check certainty (&ge;90%), Balance Sheet, Segments &amp; YoY trends.</li>
+                      <li><strong>Review exceptions:</strong> Sign off or fix flagged numbers in Human Review.</li>
+                      <li><strong>Compare with SEC facts:</strong> Generate and download your Final SEC Report.</li>
+                      <li><strong>View audit report:</strong> Inspect and verify full Decision History.</li>
+                    </ol>
+                    """
+                ),
                 unsafe_allow_html=True,
             )
             if st.button(
                 "Start guided tour",
                 key="sb_start_guided_tour",
-                help="Walk through Overview, Filing Analysis, Human Review, Accuracy Report, and Audit Trail one step at a time.",
+                help="Walk through all 5 FinovaLabs screens step by step in plain English.",
                 **stretch_width_kwargs(st.button),
             ):
                 st.session_state["fl_tour_active"] = True
@@ -955,67 +1414,72 @@ def apply_design_system(
             if st.button(
                 "Reset UI & Restart Tour",
                 key="sb_safe_ui_reset",
-                help="Safe non-destructive UI reset: clears only browser filters and tour state. Your SQLite database is untouched.",
+                help="Clears only screen filters and tour progress. Saved filings and decisions stay untouched.",
                 **stretch_width_kwargs(st.button),
             ):
                 reset_ui_session_state()
                 flash_feedback(
                     "info",
-                    "UI filters, welcome panel, and guided tour were reset safely. Real SQLite filings, decisions, and audit records remain intact.",
+                    "Screen filters, welcome panel, and guided tour were reset safely. Saved filings and decisions remain intact.",
                 )
                 st.rerun()
 
             st.caption(
-                "Safe Restart: Closing or refreshing FinovaLabs never deletes SQLite records (`finova_labs.db`). "
-                "Interrupted workflows resume automatically from saved checkpoints on Overview."
+                "Safe Restart: Closing or refreshing your browser never deletes saved filings, decisions, or "
+                "audit history. Unfinished audits resume safely from the Start & Audit Hub."
             )
 
 
-def render_welcome_panel(*, allow_dismiss: bool = True) -> None:
-    """Render the plain-English first-launch welcome banner when not yet dismissed."""
+def render_welcome_panel(
+    *,
+    allow_dismiss: bool = True,
+    primary_label: str = "Start a new audit",
+    primary_url: str = "filing-analysis",
+) -> None:
+    """Render the concise first-launch welcome banner with one primary action."""
     if st.session_state.get("fl_welcome_dismissed", False):
         return
 
     st.markdown(
-        f"""
-        <div class="fl-welcome-card">
-          <div class="fl-welcome-title">Welcome to {escape(PRODUCT_NAME)} — {escape(PRODUCT_TAGLINE)}</div>
-          <p class="fl-welcome-body">
-            FinovaLabs helps you audit real U.S. SEC <strong>Form 10-K</strong> filings step by step without guessing.
-            Choose a supported public company (Apple, Microsoft, Alphabet, Amazon, or Walmart), pull its latest
-            filing from SEC EDGAR, extract 8 standardized annual metrics with verbatim evidence, verify accounting and
-            confidence rules, resolve escalated exceptions with human oversight, benchmark pre/post accuracy against
-            SEC Company Facts, and verify every decision in an append-only SHA-256 audit ledger.
-          </p>
-        </div>
-        """,
+        _compact_html(
+            f"""
+            <div class="fl-welcome-card">
+              <div class="fl-welcome-title">Welcome to {escape(PRODUCT_NAME)} — Financial Audit Workspace</div>
+              <p class="fl-welcome-body">
+                Operational workspace for Form 10-K compliance audits: pull real SEC filings,
+                extract 8 standardized financial figures with verbatim quotes, validate accounting equations,
+                and resolve flagged review exceptions.
+              </p>
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
-    w1, w2, w3 = st.columns([1.2, 1.4, 1.0])
+    w1, w2, w3 = st.columns([1.6, 1.2, 0.9])
     with w1:
+        navigate_button(
+            primary_label,
+            primary_url,
+            key="welcome_go_fa",
+            primary=True,
+            help_text="Choose a company and retrieve its official SEC Form 10-K.",
+        )
+    with w2:
         if st.button(
             "Start guided tour",
             key="welcome_start_tour",
-            type="primary",
-            help="Open the 5-step interactive walkthrough covering every FinovaLabs screen one at a time.",
+            type="secondary",
+            help="Walk through the 5 audit workspace screens one step at a time.",
             **stretch_width_kwargs(st.button),
         ):
             st.session_state["fl_tour_active"] = True
             st.session_state["fl_tour_step"] = 0
             st.rerun()
-    with w2:
-        navigate_button(
-            "Step 1: Select Company ->",
-            "filing-analysis",
-            key="welcome_go_fa",
-            primary=False,
-            help_text="Jump directly to Filing Analysis to select a company and retrieve a live 10-K.",
-        )
     with w3:
         if allow_dismiss and st.button(
             "Dismiss welcome",
             key="welcome_dismiss_btn",
-            help="Hide this welcome panel for the current browser session (re-open anytime from 'How to use FinovaLabs' in the sidebar).",
+            help="Hide this welcome panel (you can reopen it anytime from 'How to use FinovaLabs' on the left).",
             **stretch_width_kwargs(st.button),
         ):
             st.session_state["fl_welcome_dismissed"] = True
@@ -1034,17 +1498,19 @@ def render_guided_tour_panel(current_url_path: str) -> None:
     on_target_page = current_url_path == spec["url_path"]
 
     st.markdown(
-        f"""
-        <div class="fl-tour-card">
-          <div class="fl-tour-eyebrow">Interactive Guided Tour &bull; Screen {step_idx + 1} of {total}: {escape(spec['title'])}</div>
-          <h3 class="fl-tour-title">{escape(spec['title'])}</h3>
-          <p class="fl-tour-body">
-            <strong>What it does:</strong> {escape(spec['purpose'])}<br>
-            <strong>Next action:</strong> {escape(spec['action'])}<br>
-            <strong>Expected result:</strong> {escape(spec['expect'])}
-          </p>
-        </div>
-        """,
+        _compact_html(
+            f"""
+            <div class="fl-tour-card">
+              <div class="fl-tour-eyebrow">Interactive Guided Tour &bull; Screen {step_idx + 1} of {total}: {escape(spec['title'])}</div>
+              <h3 class="fl-tour-title">{escape(spec['title'])}</h3>
+              <p class="fl-tour-body">
+                <strong>What it does:</strong> {escape(spec['purpose'])}<br>
+                <strong>Next action:</strong> {escape(spec['action'])}<br>
+                <strong>Expected result:</strong> {escape(spec['expect'])}
+              </p>
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -1102,12 +1568,14 @@ def render_next_action_box(
 ) -> None:
     """Render a consistent Next Action + Expected Result guidance strip on a page."""
     st.markdown(
-        f"""
-        <div class="fl-next-box">
-          <strong>Next Action:</strong> {escape(next_action)}<br>
-          <strong>Expected Result:</strong> {escape(expected_result)}
-        </div>
-        """,
+        _compact_html(
+            f"""
+            <div class="fl-next-box">
+              <strong>Next Action:</strong> {escape(next_action)}<br>
+              <strong>Expected Result:</strong> {escape(expected_result)}
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -1185,26 +1653,43 @@ def render_workflow_stepper(
     filings_count: int = 0,
     metrics_count: int = 0,
     validations_count: int = 0,
+    failed_checks: int = 0,
     runs_count: int = 0,
     open_reviews: int = 0,
     resolved_reviews: int = 0,
     evaluations_count: int = 0,
     events_count: int = 0,
 ) -> None:
-    """Render the 7-stage end-to-end audit workflow progress indicator."""
+    """Render the persistent 7-stage end-to-end financial audit progress indicator."""
     steps = [
-        (1, "1. Select company ->", f"{companies_count} company(s)" if companies_count else "Pick ticker", companies_count > 0),
-        (2, "2. Retrieve 10-K ->", f"{filings_count} filing(s)" if filings_count else "Fetch EDGAR", filings_count > 0),
-        (3, "3. Extract metrics ->", f"{metrics_count} metric(s)" if metrics_count else "8 core metrics", metrics_count > 0),
-        (4, "4. Validate ->", f"{validations_count} check(s)" if validations_count else ("Checked" if runs_count else "Rules & conf."), validations_count > 0 or runs_count > 0),
-        (5, "5. Review exceptions ->", f"{open_reviews} open" if open_reviews else (f"{resolved_reviews} resolved" if resolved_reviews else ("Queue clear" if runs_count else "Auto/escalate")), runs_count > 0 and open_reviews == 0),
-        (6, "6. Compare with SEC facts ->", f"{evaluations_count} evaluated" if evaluations_count else "Pre vs. post", evaluations_count > 0),
-        (7, "7. View audit report", f"{events_count} event(s)" if events_count else "SHA-256 log", events_count > 0 and evaluations_count > 0),
+        (1, "1. Select company", f"{companies_count} company(s)" if companies_count else "Pick company", companies_count > 0),
+        (2, "2. Retrieve 10-K", f"{filings_count} filing(s)" if filings_count else "Get SEC filing", filings_count > 0),
+        (3, "3. Extract metrics", f"{metrics_count} figure(s)" if metrics_count else "8 core figures", metrics_count > 0),
+        (
+            4,
+            "4. Validate",
+            f"{failed_checks} failed check(s)"
+            if failed_checks > 0
+            else (f"{validations_count} check(s) ok" if validations_count else ("Checked" if runs_count else "Accounting rules")),
+            (validations_count > 0 or runs_count > 0) and failed_checks == 0,
+        ),
+        (
+            5,
+            "5. Review exceptions",
+            f"{open_reviews} pending"
+            if open_reviews
+            else (f"{resolved_reviews} signed off" if resolved_reviews else ("No exceptions" if runs_count else "Analyst sign-off")),
+            runs_count > 0 and open_reviews == 0,
+        ),
+        (6, "6. Compare with SEC facts", f"{evaluations_count} verified" if evaluations_count else "Final report", evaluations_count > 0),
+        (7, "7. View audit report", f"{events_count} record(s)" if events_count else "Decision history", events_count > 0 and evaluations_count > 0),
     ]
     blocks = []
     for num, label, sub, is_done in steps:
         if num == active_step:
             cls = "fl-step fl-step-active"
+        elif num == 4 and failed_checks > 0:
+            cls = "fl-step fl-step-fail"
         elif num == 5 and open_reviews > 0:
             cls = "fl-step fl-step-alert"
         elif is_done:
@@ -1218,6 +1703,53 @@ def render_workflow_stepper(
     st.markdown(f'<div class="fl-stepper">{"".join(blocks)}</div>', unsafe_allow_html=True)
 
 
+def render_work_status_strip(
+    *,
+    pending_count: int = 0,
+    completed_count: int = 0,
+    failed_count: int = 0,
+    human_decisions_count: int = 0,
+) -> None:
+    """Render a persistent 4-pill bar separating Pending, Completed, Failed Checks, and Human Decisions."""
+    p_cls = "fl-work-pill-pending" if pending_count > 0 else "fl-work-pill-muted"
+    c_cls = "fl-work-pill-completed" if completed_count > 0 else "fl-work-pill-muted"
+    f_cls = "fl-work-pill-failed" if failed_count > 0 else "fl-work-pill-muted"
+    h_cls = "fl-work-pill-human" if human_decisions_count > 0 else "fl-work-pill-muted"
+
+    st.markdown(
+        _compact_html(
+            f"""
+            <div class="fl-work-strip">
+              <div class="fl-work-pill {p_cls}"><span class="fl-work-label"><span class="fl-work-dot"></span>Pending Work</span><span>{pending_count}</span></div>
+              <div class="fl-work-pill {c_cls}"><span class="fl-work-label"><span class="fl-work-dot"></span>Completed Audits</span><span>{completed_count}</span></div>
+              <div class="fl-work-pill {f_cls}"><span class="fl-work-label"><span class="fl-work-dot"></span>Failed Checks</span><span>{failed_count}</span></div>
+              <div class="fl-work-pill {h_cls}"><span class="fl-work-label"><span class="fl-work-dot"></span>Human Decisions</span><span>{human_decisions_count}</span></div>
+            </div>
+            """
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_analyst_glossary_strip(*, expanded: bool = False) -> None:
+    """Render plain-English contextual explanations for Confidence, Evidence, Period, Units, and Validation."""
+    with st.expander("How to read audit fields (Confidence, Evidence, Period, Units & Validation)", expanded=expanded):
+        st.markdown(
+            _compact_html(
+                f"""
+                <div class="fl-glossary-grid">
+                  <div class="fl-glossary-item"><strong>Confidence Score</strong>{escape(TOOLTIP_CONFIDENCE)}</div>
+                  <div class="fl-glossary-item"><strong>Evidence &amp; 10-K Quote</strong>{escape(TOOLTIP_EVIDENCE)}</div>
+                  <div class="fl-glossary-item"><strong>Reporting Period</strong>{escape(TOOLTIP_PERIOD)}</div>
+                  <div class="fl-glossary-item"><strong>Units &amp; Scale</strong>{escape(TOOLTIP_UNIT)}</div>
+                  <div class="fl-glossary-item"><strong>Validation Check</strong>{escape(TOOLTIP_VALIDATION)}</div>
+                </div>
+                """
+            ),
+            unsafe_allow_html=True,
+        )
+
+
 def render_page_header(
     title: str,
     subtitle: str,
@@ -1226,17 +1758,20 @@ def render_page_header(
 ) -> None:
     """Render the branded enterprise header banner for a FinovaLabs page."""
     badge_html = status_badge(status_label, tone=status_tone)
+    mark_svg = globals().get("_MARK_MINI_SVG") or globals().get("MARK_MINI_SVG") or _MARK_MINI_SVG
     st.markdown(
-        f"""
-        <div class="fl-header">
-          <div>
-            <div class="fl-header-eyebrow">{escape(PRODUCT_NAME)} &bull; {escape(PRODUCT_TAGLINE)}</div>
-            <h1 class="fl-header-title">{escape(title)}</h1>
-            <p class="fl-header-subtitle">{escape(subtitle)}</p>
-          </div>
-          <div>{badge_html}</div>
-        </div>
-        """,
+        _compact_html(
+            f"""
+            <div class="fl-header">
+              <div>
+                <div class="fl-header-eyebrow">{mark_svg}<span><strong>FINOVA</strong>LABS &bull; SEC 10-K RESEARCH &amp; AUDIT</span></div>
+                <h1 class="fl-header-title">{escape(title)}</h1>
+                <p class="fl-header-subtitle">{escape(subtitle)}</p>
+              </div>
+              <div>{badge_html}</div>
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -1246,13 +1781,15 @@ def render_metric_cards(cards: Sequence[dict[str, str]]) -> None:
     items_html = []
     for card in cards:
         items_html.append(
-            f"""
-            <div class="fl-card">
-              <div class="fl-kpi-label">{escape(card.get("label", ""))}</div>
-              <div class="fl-kpi-value">{escape(card.get("value", ""))}</div>
-              <div class="fl-kpi-detail">{escape(card.get("detail", ""))}</div>
-            </div>
-            """
+            _compact_html(
+                f"""
+                <div class="fl-card">
+                  <div class="fl-kpi-label">{escape(card.get("label", ""))}</div>
+                  <div class="fl-kpi-value">{escape(card.get("value", ""))}</div>
+                  <div class="fl-kpi-detail">{escape(card.get("detail", ""))}</div>
+                </div>
+                """
+            )
         )
     st.markdown(
         f'<div class="fl-grid">{"".join(items_html)}</div>',
@@ -1269,15 +1806,17 @@ def render_info_card(
     """Render a polished white enterprise card with optional status badge."""
     badge_html = status_badge(badge_label, tone=badge_tone) if badge_label else ""
     st.markdown(
-        f"""
-        <div class="fl-card" style="margin-bottom:1rem;">
-          <div class="fl-card-header">
-            <h3 class="fl-card-title">{escape(title)}</h3>
-            {badge_html}
-          </div>
-          <p class="fl-card-body">{escape(body)}</p>
-        </div>
-        """,
+        _compact_html(
+            f"""
+            <div class="fl-card fl-info-card">
+              <div class="fl-card-header">
+                <h3 class="fl-card-title">{escape(title)}</h3>
+                {badge_html}
+              </div>
+              <p class="fl-card-body">{escape(body)}</p>
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -1295,14 +1834,16 @@ def render_empty_state(
         else ""
     )
     st.markdown(
-        f"""
-        <div class="fl-empty">
-          <div class="fl-empty-badge">{escape(badge_label)}</div>
-          <h3 class="fl-empty-title">{escape(title)}</h3>
-          <p class="fl-empty-desc">{escape(description)}</p>
-          {next_html}
-        </div>
-        """,
+        _compact_html(
+            f"""
+            <div class="fl-empty">
+              <div class="fl-empty-badge">{escape(badge_label)}</div>
+              <h3 class="fl-empty-title">{escape(title)}</h3>
+              <p class="fl-empty-desc">{escape(description)}</p>
+              {next_html}
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -1319,13 +1860,15 @@ def render_error_banner(
         else ""
     )
     st.markdown(
-        f"""
-        <div class="fl-error-box">
-          <div class="fl-error-title">{escape(title)}</div>
-          <div>{escape(message)}</div>
-          {hint_html}
-        </div>
-        """,
+        _compact_html(
+            f"""
+            <div class="fl-error-box">
+              <div class="fl-error-title">{escape(title)}</div>
+              <div>{escape(message)}</div>
+              {hint_html}
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -1335,6 +1878,7 @@ def render_status_table(
     rows: Sequence[Sequence[tuple[str, str] | str]],
     right_align_cols: set[int] | None = None,
     header_tooltips: dict[str, str] | None = None,
+    min_width: str | None = None,
 ) -> None:
     """Render a modern HTML table with optional right-alignment and header tooltips.
 
@@ -1365,15 +1909,18 @@ def render_status_table(
                 cells.append(f"<td{cls_attr}>{escape(cell)}</td>")
         body_rows.append(f"<tr>{''.join(cells)}</tr>")
 
+    table_style = f' style="min-width: {min_width};"' if min_width else ""
     st.markdown(
-        f"""
-        <div class="fl-table-wrap">
-          <table class="fl-table">
-            <thead><tr>{head_html}</tr></thead>
-            <tbody>{"".join(body_rows)}</tbody>
-          </table>
-        </div>
-        """,
+        _compact_html(
+            f"""
+            <div class="fl-table-wrap">
+              <table class="fl-table"{table_style}>
+                <thead><tr>{head_html}</tr></thead>
+                <tbody>{"".join(body_rows)}</tbody>
+              </table>
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -1404,51 +1951,77 @@ def render_plotly_chart(
     *,
     title: str | None = None,
     key: str | None = None,
-    height: int = 330,
+    height: int = 380,
+    legend_position: str = "bottom",
 ) -> None:
-    """Style and render an interactive Plotly chart inside an enterprise white card."""
-    fig.update_layout(
-        title=dict(
-            text=title or "",
-            font=dict(size=14, color="#0B1E36", family="Inter, Segoe UI, sans-serif"),
-            x=0.01,
-            xanchor="left",
+    """Style and render an interactive Plotly chart inside a crisp white editorial frame.
+
+    Renders chart title as a clean editorial card header above the plot to eliminate
+    any SVG canvas overlap with legends, plotting areas, and axis labels.
+    """
+    margin_b = 68 if legend_position == "bottom" else 36
+    legend_kwargs: dict[str, Any]
+    if legend_position == "bottom":
+        legend_kwargs = dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.20,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11, color="#273447"),
         )
-        if title
-        else None,
-        paper_bgcolor="#FFFFFF",
-        plot_bgcolor="#FFFFFF",
-        font=dict(color="#334155", family="Inter, Segoe UI, sans-serif", size=12),
-        margin=dict(l=16, r=16, t=46 if title else 24, b=20),
-        height=height,
-        legend=dict(
+    else:
+        legend_kwargs = dict(
             orientation="h",
             yanchor="bottom",
             y=1.02,
-            xanchor="right",
-            x=1.0,
-            font=dict(size=11, color="#334155"),
-        ),
-        hoverlabel=dict(bgcolor="#0B1E36", font_color="#FFFFFF", bordercolor="#1D4ED8"),
+            xanchor="left",
+            x=0.0,
+            font=dict(size=11, color="#273447"),
+        )
+
+    fig.update_layout(
+        title=None,
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#FFFFFF",
+        font=dict(color="#273447", family="IBM Plex Sans, Inter, Segoe UI, sans-serif", size=11),
+        margin=dict(l=16, r=16, t=20, b=margin_b),
+        height=height,
+        autosize=True,
+        legend=legend_kwargs,
+        hoverlabel=dict(bgcolor="#0C1B2E", font_color="#FFFFFF", bordercolor="#1E4B9A"),
     )
     fig.update_xaxes(
         showgrid=False,
-        linecolor="#E2E8F0",
-        tickfont=dict(color="#334155", size=11),
-        title_font=dict(color="#0F172A", size=12),
+        linecolor="#DDDAD2",
+        tickfont=dict(color="#273447", size=11),
+        title_font=dict(color="#0C1B2E", size=11),
+        automargin=True,
     )
     fig.update_yaxes(
-        gridcolor="#F1F5F9",
-        zerolinecolor="#E2E8F0",
-        tickfont=dict(color="#334155", size=11),
-        title_font=dict(color="#0F172A", size=12),
+        gridcolor="#EFECE5",
+        zerolinecolor="#DDDAD2",
+        tickfont=dict(color="#273447", size=11),
+        title_font=dict(color="#0C1B2E", size=11),
+        automargin=True,
     )
     with st.container(border=True):
+        if title:
+            st.markdown(
+                _compact_html(
+                    f"""
+                    <div class="fl-chart-header">
+                      <div class="fl-chart-title">{escape(title)}</div>
+                    </div>
+                    """
+                ),
+                unsafe_allow_html=True,
+            )
         st.plotly_chart(
             fig,
             key=key,
             theme=None,
-            config={"displayModeBar": False},
+            config={"displayModeBar": False, "responsive": True},
             **stretch_width_kwargs(st.plotly_chart),
         )
 
@@ -1467,11 +2040,13 @@ def stretch_width_kwargs(widget_fn: Callable[..., Any]) -> dict[str, Any]:
 def render_footer(note: str = "MINEARENA PS-01 • Enterprise Foundation") -> None:
     """Render the consistent FinovaLabs footer."""
     st.markdown(
-        f"""
-        <div class="fl-footer">
-          <span><strong>{escape(PRODUCT_NAME)}</strong> &mdash; {escape(PRODUCT_TAGLINE)}</span>
-          <span>{escape(note)}</span>
-        </div>
-        """,
+        _compact_html(
+            f"""
+            <div class="fl-footer">
+              <span><strong>{escape(PRODUCT_NAME)}</strong> &mdash; {escape(PRODUCT_TAGLINE)}</span>
+              <span>{escape(note)}</span>
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )

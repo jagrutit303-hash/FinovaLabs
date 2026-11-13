@@ -79,7 +79,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             Audit Workspace
           </button>
           <a
-            href="http://localhost:8000/docs"
+            href="/docs"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1.5 text-sm font-medium text-slate-600 transition-colors hover:text-slate-950"

@@ -236,6 +236,324 @@ CREATE INDEX IF NOT EXISTS idx_accuracy_eval_run_id ON accuracy_evaluations(run_
 CREATE INDEX IF NOT EXISTS idx_audit_events_run_id ON audit_events(run_id);
 """
 
+_SCHEMA_SQL_PG = """
+CREATE TABLE IF NOT EXISTS audit_runs (
+    run_id TEXT PRIMARY KEY,
+    cik TEXT NOT NULL,
+    filing_id INTEGER,
+    accession_number TEXT,
+    idempotency_key TEXT,
+    company_name TEXT,
+    ticker TEXT,
+    form_type TEXT NOT NULL,
+    fiscal_year INTEGER,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    current_stage TEXT NOT NULL DEFAULT 'PENDING',
+    overall_confidence DOUBLE PRECISION,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    error_message TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sec_filings (
+    id SERIAL PRIMARY KEY,
+    cik TEXT NOT NULL,
+    ticker TEXT,
+    company_name TEXT,
+    accession_number TEXT NOT NULL,
+    form_type TEXT NOT NULL,
+    filing_date TEXT NOT NULL,
+    reporting_period TEXT,
+    fiscal_year INTEGER,
+    retrieval_status TEXT NOT NULL DEFAULT 'RETRIEVED',
+    primary_document TEXT,
+    filing_url TEXT NOT NULL,
+    submissions_url TEXT NOT NULL,
+    companyfacts_url TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    UNIQUE(cik, accession_number)
+);
+
+CREATE TABLE IF NOT EXISTS extracted_metrics (
+    id SERIAL PRIMARY KEY,
+    run_id TEXT,
+    cik TEXT,
+    ticker TEXT,
+    accession_number TEXT,
+    form_type TEXT,
+    metric_name TEXT NOT NULL,
+    xbrl_concept TEXT,
+    raw_value TEXT,
+    normalized_value DOUBLE PRECISION,
+    normalized_decimal TEXT,
+    unit TEXT DEFAULT 'USD',
+    currency TEXT DEFAULT 'USD',
+    scale_factor INTEGER DEFAULT 1,
+    fiscal_period TEXT,
+    fiscal_year INTEGER,
+    period_start TEXT,
+    period_end TEXT,
+    source_url TEXT,
+    source_evidence TEXT,
+    evidence_location TEXT,
+    extraction_status TEXT NOT NULL DEFAULT 'EXTRACTED',
+    candidates_json TEXT,
+    confidence_score DOUBLE PRECISION,
+    confidence_components_json TEXT,
+    confidence_reasons TEXT,
+    confidence_threshold DOUBLE PRECISION,
+    scoring_version TEXT,
+    validation_status TEXT NOT NULL DEFAULT 'PENDING',
+    review_status TEXT NOT NULL DEFAULT 'NOT_REQUIRED',
+    reviewed_value DOUBLE PRECISION,
+    reviewed_decimal TEXT,
+    reviewer_note TEXT,
+    reviewed_by TEXT,
+    reviewed_at TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (run_id) REFERENCES audit_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS review_tasks (
+    task_id TEXT PRIMARY KEY,
+    run_id TEXT,
+    cik TEXT,
+    ticker TEXT,
+    accession_number TEXT,
+    metric_id INTEGER,
+    metric_name TEXT,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'OPEN',
+    reviewer_note TEXT,
+    resolved_value DOUBLE PRECISION,
+    resolved_decimal TEXT,
+    resolved_by TEXT,
+    decision_key TEXT,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    FOREIGN KEY (run_id) REFERENCES audit_runs(run_id) ON DELETE CASCADE,
+    FOREIGN KEY (metric_id) REFERENCES extracted_metrics(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS validation_results (
+    validation_id TEXT PRIMARY KEY,
+    run_id TEXT,
+    cik TEXT NOT NULL,
+    ticker TEXT,
+    accession_number TEXT NOT NULL,
+    rule_name TEXT NOT NULL,
+    metric_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    explanation TEXT NOT NULL,
+    input_metric_refs_json TEXT NOT NULL,
+    expected_value TEXT,
+    actual_value TEXT,
+    variance_abs TEXT,
+    variance_pct TEXT,
+    tolerance_used TEXT,
+    escalated INTEGER NOT NULL DEFAULT 0,
+    evaluated_at TEXT NOT NULL,
+    FOREIGN KEY (run_id) REFERENCES audit_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS accuracy_evaluations (
+    eval_id SERIAL PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    metric_id INTEGER,
+    cik TEXT,
+    ticker TEXT,
+    company_name TEXT,
+    accession_number TEXT,
+    form_type TEXT,
+    metric_name TEXT NOT NULL,
+    xbrl_concept TEXT,
+    unit TEXT,
+    fiscal_period TEXT,
+    fiscal_year INTEGER,
+    period_start TEXT,
+    period_end TEXT,
+    extracted_value DOUBLE PRECISION,
+    pre_review_decimal TEXT,
+    post_review_decimal TEXT,
+    review_status TEXT,
+    ground_truth_value DOUBLE PRECISION,
+    ground_truth_decimal TEXT,
+    ground_truth_unit TEXT,
+    ground_truth_concept TEXT,
+    ground_truth_fiscal_period TEXT,
+    ground_truth_period_start TEXT,
+    ground_truth_period_end TEXT,
+    ground_truth_accession TEXT,
+    abs_diff DOUBLE PRECISION,
+    rel_diff DOUBLE PRECISION,
+    matched INTEGER NOT NULL DEFAULT 0,
+    pre_abs_diff TEXT,
+    pre_pct_diff TEXT,
+    pre_exact_match INTEGER NOT NULL DEFAULT 0,
+    pre_status TEXT NOT NULL DEFAULT 'UNAVAILABLE_REFERENCE',
+    post_abs_diff TEXT,
+    post_pct_diff TEXT,
+    post_exact_match INTEGER NOT NULL DEFAULT 0,
+    post_status TEXT NOT NULL DEFAULT 'UNAVAILABLE_REFERENCE',
+    comparison_status TEXT NOT NULL DEFAULT 'UNAVAILABLE_REFERENCE',
+    explanation TEXT,
+    reference_source_url TEXT,
+    reference_fact_json TEXT,
+    evaluated_at TEXT NOT NULL,
+    FOREIGN KEY (run_id) REFERENCES audit_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS audit_events (
+    event_id SERIAL PRIMARY KEY,
+    seq_id INTEGER,
+    run_id TEXT,
+    cik TEXT,
+    ticker TEXT,
+    company_name TEXT,
+    filing_id INTEGER,
+    accession_number TEXT,
+    metric_id INTEGER,
+    metric_name TEXT,
+    event_type TEXT NOT NULL,
+    decision TEXT,
+    original_value TEXT,
+    corrected_value TEXT,
+    actor TEXT NOT NULL DEFAULT 'system',
+    reviewer_id TEXT,
+    session_id TEXT,
+    explanation TEXT,
+    payload_json TEXT NOT NULL,
+    prev_hash TEXT NOT NULL,
+    event_hash TEXT NOT NULL,
+    hash_version INTEGER NOT NULL DEFAULT 2,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS idempotency_records (
+    idempotency_key TEXT PRIMARY KEY,
+    scope TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    result_json TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sec_filings_cik_form ON sec_filings(cik, form_type, filing_date);
+CREATE INDEX IF NOT EXISTS idx_extracted_metrics_run_id ON extracted_metrics(run_id);
+CREATE INDEX IF NOT EXISTS idx_review_tasks_status ON review_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_accuracy_eval_run_id ON accuracy_evaluations(run_id);
+CREATE INDEX IF NOT EXISTS idx_audit_events_run_id ON audit_events(run_id);
+"""
+
+
+class SmartRow(dict):
+    """Dictionary subclass providing both key-based and integer-index access (sqlite3.Row parity)."""
+
+    def __init__(self, d: dict[str, Any], keys: list[str]) -> None:
+        super().__init__(d)
+        self._keys = list(keys)
+
+    def __getitem__(self, item: Any) -> Any:
+        if isinstance(item, int):
+            return super().__getitem__(self._keys[item])
+        return super().__getitem__(item)
+
+
+def _smart_row_factory(cursor: Any) -> Any:
+    names = [c.name for c in cursor.description] if cursor.description else []
+
+    def make_row(values: Any) -> SmartRow:
+        return SmartRow(dict(zip(names, values)), names)
+
+    return make_row
+
+
+class PgCursorWrapper:
+    """Adapts a psycopg cursor to sqlite3 parameter syntax ('?' -> '%s') and SmartRow objects."""
+
+    def __init__(self, cursor: Any) -> None:
+        self._cursor = cursor
+
+    @staticmethod
+    def _adapt_query(query: str) -> str:
+        q_strip = query.strip()
+        if q_strip.upper().startswith("PRAGMA"):
+            return "SELECT 1;"
+        parts = query.split("'")
+        for i in range(0, len(parts), 2):
+            parts[i] = parts[i].replace("?", "%s")
+        return "'".join(parts)
+
+    def execute(self, query: str, params: Any = None) -> PgCursorWrapper:
+        adapted = self._adapt_query(query)
+        if params is not None:
+            self._cursor.execute(adapted, params)
+        else:
+            self._cursor.execute(adapted)
+        return self
+
+    def executemany(self, query: str, seq_of_params: Any) -> PgCursorWrapper:
+        adapted = self._adapt_query(query)
+        self._cursor.executemany(adapted, seq_of_params)
+        return self
+
+    def fetchone(self) -> Any:
+        return self._cursor.fetchone()
+
+    def fetchall(self) -> list[Any]:
+        return self._cursor.fetchall()
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter(self._cursor)
+
+    @property
+    def rowcount(self) -> int:
+        return self._cursor.rowcount
+
+
+class PgConnectionWrapper:
+    """Wraps a psycopg Connection to provide a sqlite3-compatible interface with autocommit/rollback."""
+
+    def __init__(self, raw_conn: Any) -> None:
+        self._conn = raw_conn
+
+    def execute(self, query: str, params: Any = None) -> PgCursorWrapper:
+        cursor = self._conn.cursor(row_factory=_smart_row_factory)
+        wrapper = PgCursorWrapper(cursor)
+        wrapper.execute(query, params)
+        return wrapper
+
+    def executemany(self, query: str, seq_of_params: Any) -> PgCursorWrapper:
+        cursor = self._conn.cursor(row_factory=_smart_row_factory)
+        wrapper = PgCursorWrapper(cursor)
+        wrapper.executemany(query, seq_of_params)
+        return wrapper
+
+    def executescript(self, script: str) -> None:
+        for stmt in script.split(";"):
+            clean = stmt.strip()
+            if clean:
+                self.execute(clean)
+
+    def commit(self) -> None:
+        self._conn.commit()
+
+    def rollback(self) -> None:
+        self._conn.rollback()
+
+    def close(self) -> None:
+        self._conn.close()
+
+
+def is_postgres_configured() -> bool:
+    """Return True if DATABASE_URL or POSTGRES_URL is configured for PostgreSQL."""
+    try:
+        url = get_settings().database_url
+        if url and (url.startswith("postgresql://") or url.startswith("postgres://")):
+            return True
+    except Exception:
+        pass
+    return False
+
 
 def resolve_db_path(db_path: Path | str | None = None) -> Path:
     """Resolve target SQLite database path from argument or centralized settings."""
@@ -245,8 +563,28 @@ def resolve_db_path(db_path: Path | str | None = None) -> Path:
 
 
 @contextmanager
-def get_connection(db_path: Path | str | None = None) -> Iterator[sqlite3.Connection]:
-    """Yield a managed SQLite connection with WAL mode and foreign keys enabled."""
+def get_connection(db_path: Path | str | None = None) -> Iterator[Any]:
+    """Yield a managed database connection (PostgreSQL when configured, otherwise SQLite WAL)."""
+    if is_postgres_configured():
+        import psycopg
+        db_url = get_settings().database_url
+        raw_conn = None
+        wrapper = None
+        try:
+            raw_conn = psycopg.connect(db_url)
+            wrapper = PgConnectionWrapper(raw_conn)
+            yield wrapper
+            wrapper.commit()
+        except Exception as exc:
+            if wrapper is not None:
+                wrapper.rollback()
+            logger.exception("PostgreSQL database transaction failed")
+            raise DatabaseError(f"PostgreSQL operation failed: {exc}") from exc
+        finally:
+            if wrapper is not None:
+                wrapper.close()
+        return
+
     target = resolve_db_path(db_path)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -282,6 +620,7 @@ def get_connection(db_path: Path | str | None = None) -> Iterator[sqlite3.Connec
         raise
     finally:
         conn.close()
+
 
 
 def _migrate_sec_filings(conn: sqlite3.Connection) -> None:
@@ -562,8 +901,54 @@ def _migrate_audit_events(conn: sqlite3.Connection) -> None:
             )
 
 
-def init_db(db_path: Path | str | None = None) -> Path:
-    """Create FinovaLabs SQLite tables and indexes if they do not already exist."""
+def init_db(db_path: Path | str | None = None) -> Any:
+    """Create FinovaLabs tables and indexes in PostgreSQL or SQLite if they do not already exist."""
+    if is_postgres_configured():
+        with get_connection() as conn:
+            conn.executescript(_SCHEMA_SQL_PG)
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_runs_idempotency_key "
+                "ON audit_runs(idempotency_key) WHERE idempotency_key IS NOT NULL;"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_audit_runs_status "
+                "ON audit_runs(status, current_stage);"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_extracted_metrics_accn "
+                "ON extracted_metrics(cik, accession_number);"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_tasks_accn "
+                "ON review_tasks(cik, accession_number, status);"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_tasks_run_status "
+                "ON review_tasks(run_id, status);"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_validation_results_accn "
+                "ON validation_results(cik, accession_number, status);"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_accuracy_evaluations_run "
+                "ON accuracy_evaluations(run_id, metric_name);"
+            )
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_events_seq_id "
+                "ON audit_events(seq_id) WHERE seq_id IS NOT NULL;"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_audit_events_filters "
+                "ON audit_events(ticker, cik, created_at, decision, metric_name);"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_audit_events_accn "
+                "ON audit_events(accession_number);"
+            )
+        logger.info("PostgreSQL database initialized successfully")
+        return Path("postgresql://active")
+
     target = resolve_db_path(db_path)
     with get_connection(target) as conn:
         conn.executescript(_SCHEMA_SQL)
@@ -619,9 +1004,9 @@ def init_db(db_path: Path | str | None = None) -> Path:
 
 @contextmanager
 def _optional_transaction(
-    conn: sqlite3.Connection | None = None,
+    conn: Any = None,
     db_path: Path | str | None = None,
-) -> Iterator[sqlite3.Connection]:
+) -> Iterator[Any]:
     """Yield an active transaction connection, or open/commit a new get_connection."""
     if conn is not None:
         yield conn
@@ -642,7 +1027,35 @@ def _query_all(
 
 
 def check_db_health(db_path: Path | str | None = None) -> dict[str, Any]:
-    """Verify SQLite connectivity, table presence, and current record counts."""
+    """Verify database connectivity, table presence, and current record counts."""
+    if is_postgres_configured():
+        with get_connection() as conn:
+            ver_row = conn.execute("SELECT version()").fetchone()
+            pg_version = ver_row[0] if ver_row else "PostgreSQL"
+            existing_tables = {
+                row["name"]
+                for row in conn.execute(
+                    "SELECT table_name as name FROM information_schema.tables WHERE table_schema = 'public'"
+                ).fetchall()
+            }
+            missing_tables = [t for t in CORE_TABLES if t not in existing_tables]
+            table_counts = {
+                table: (
+                    conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                    if table in existing_tables
+                    else 0
+                )
+                for table in CORE_TABLES
+            }
+        return {
+            "db_path": "PostgreSQL (Managed Cloud Database)",
+            "sqlite_version": f"PostgreSQL ({pg_version[:32]})",
+            "size_bytes": 0,
+            "healthy": len(missing_tables) == 0,
+            "missing_tables": missing_tables,
+            "table_counts": table_counts,
+        }
+
     target = resolve_db_path(db_path)
     with get_connection(target) as conn:
         sqlite_version = conn.execute("SELECT sqlite_version()").fetchone()[0]
@@ -727,6 +1140,12 @@ def fetch_dashboard_summary(db_path: Path | str | None = None) -> dict[str, int]
         ).fetchone()[0]
         audit_events = conn.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0]
         validation_checks = conn.execute("SELECT COUNT(*) FROM validation_results").fetchone()[0]
+        failed_validations = conn.execute(
+            "SELECT COUNT(*) FROM validation_results WHERE status = 'FAIL'"
+        ).fetchone()[0]
+        warning_validations = conn.execute(
+            "SELECT COUNT(*) FROM validation_results WHERE status = 'WARNING'"
+        ).fetchone()[0]
 
     return {
         "total_companies": total_companies,
@@ -738,6 +1157,8 @@ def fetch_dashboard_summary(db_path: Path | str | None = None) -> dict[str, int]
         "extracted_metrics": extracted_metrics,
         "auto_approved_metrics": auto_approved_metrics,
         "validation_checks": validation_checks,
+        "failed_validations": failed_validations,
+        "warning_validations": warning_validations,
         "open_reviews": open_reviews,
         "total_escalations": total_escalations,
         "resolved_reviews": resolved_reviews,
@@ -1317,8 +1738,14 @@ def fetch_review_tasks(
     clauses: list[str] = []
     params: list[Any] = []
     if status:
-        clauses.append("rt.status = ?")
-        params.append(status)
+        status_clean = str(status).upper().strip()
+        if status_clean in ("PENDING", "OPEN"):
+            clauses.append("rt.status = 'OPEN'")
+        elif status_clean in ("RESOLVED", "CLOSED"):
+            clauses.append("rt.status IN ('APPROVED', 'CORRECTED', 'REJECTED')")
+        else:
+            clauses.append("rt.status = ?")
+            params.append(status_clean)
     if run_id:
         clauses.append("rt.run_id = ?")
         params.append(run_id)

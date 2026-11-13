@@ -29,12 +29,12 @@ export const Footer: React.FC = () => {
               <span>GitHub Repository</span>
             </a>
             <a
-              href="http://localhost:8501"
+              href="/docs"
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
             >
-              <span>Python Streamlit App</span>
+              <span>FastAPI Documentation</span>
               <ExternalLink className="h-3 w-3" />
             </a>
           </div>

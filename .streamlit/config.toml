@@ -1,11 +1,17 @@
 [theme]
 base = "light"
-primaryColor = "#1D4ED8"
-backgroundColor = "#F8FAFC"
+primaryColor = "#1E4B9A"
+backgroundColor = "#F7F6F2"
 secondaryBackgroundColor = "#FFFFFF"
-textColor = "#0F172A"
+textColor = "#0C1B2E"
 font = "sans serif"
 
 [client]
 showSidebarNavigation = true
 
+[server]
+port = 8501
+address = "127.0.0.1"
+headless = true
+enableCORS = false
+enableXsrfProtection = false

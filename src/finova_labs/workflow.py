@@ -31,6 +31,7 @@ from finova_labs.database import (
     get_connection,
     get_idempotency_record,
     init_db,
+    is_postgres_configured,
     record_human_review_decision,
     resolve_db_path,
     sync_review_tasks_for_filing,
@@ -125,8 +126,19 @@ def build_workflow_idempotency_key(
 
 
 @contextmanager
-def _open_checkpointer(db_path: Path | str | None = None) -> Iterator[SqliteSaver]:
-    """Open and initialize LangGraph's SqliteSaver on the target SQLite database."""
+def _open_checkpointer(db_path: Path | str | None = None) -> Iterator[Any]:
+    """Open and initialize LangGraph checkpointer (PostgresSaver when configured, else SQLite SqliteSaver)."""
+    if is_postgres_configured():
+        from langgraph.checkpoint.postgres import PostgresSaver
+        from psycopg_pool import ConnectionPool
+
+        db_url = get_settings().database_url
+        with ConnectionPool(conninfo=db_url, max_size=5, kwargs={"autocommit": True}) as pool:
+            checkpointer = PostgresSaver(pool)
+            checkpointer.setup()
+            yield checkpointer
+        return
+
     target = resolve_db_path(db_path)
     init_db(target)
     conn = sqlite3.connect(str(target), check_same_thread=False, timeout=15.0)
@@ -739,7 +751,7 @@ def _finalize_node(state: WorkflowState) -> dict[str, Any]:
     }
 
 
-def _compile_workflow_graph(checkpointer: SqliteSaver) -> Any:
+def _compile_workflow_graph(checkpointer: Any) -> Any:
     """Build and compile the FinovaLabs LangGraph state machine."""
     builder: StateGraph = StateGraph(WorkflowState)
     builder.add_node("extract_and_score", _extract_and_score_node)
@@ -772,6 +784,11 @@ def _outcome_from_result(
 ) -> WorkflowOutcome:
     is_interrupted = bool(result_state.get("__interrupt__")) or bool(result_state.get("paused_for_review"))
     open_count = fetch_open_review_count_for_run(run_id, db_path=db_path)
+    backend_name = (
+        "langgraph.checkpoint.postgres.PostgresSaver"
+        if is_postgres_configured()
+        else "langgraph.checkpoint.sqlite.SqliteSaver"
+    )
     return WorkflowOutcome(
         run_id=run_id,
         idempotency_key=result_state.get("idempotency_key"),
@@ -785,6 +802,7 @@ def _outcome_from_result(
         executed_nodes=list(result_state.get("executed_nodes", [])),
         finalized=bool(result_state.get("finalized")),
         reused_existing_run=reused_existing_run,
+        checkpoint_backend=backend_name,
     )
 
 

@@ -13,6 +13,22 @@ _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 _LOGGER_NAMESPACE = "finova_labs"
 
 
+class SafeRotatingFileHandler(RotatingFileHandler):
+    """Windows-safe rotating file handler that catches WinError 32 without crashing or printing errors."""
+
+    def doRollover(self) -> None:
+        try:
+            super().doRollover()
+        except (PermissionError, OSError):
+            # On Windows, another concurrent process or thread holds an open handle.
+            # Gracefully reopen the base stream if closed and continue appending without crashing.
+            if self.stream is None:
+                try:
+                    self.stream = self._open()
+                except Exception:
+                    pass
+
+
 def configure_logging(settings: Settings | None = None) -> logging.Logger:
     """Configure console and rotating file logging once for the package."""
     cfg = settings or get_settings()
@@ -35,9 +51,9 @@ def configure_logging(settings: Settings | None = None) -> logging.Logger:
     log_file: Path = cfg.log_file
     try:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = RotatingFileHandler(
+        file_handler = SafeRotatingFileHandler(
             log_file,
-            maxBytes=2_000_000,
+            maxBytes=10_000_000,
             backupCount=3,
             encoding="utf-8",
         )

@@ -173,13 +173,13 @@ export const AuditDashboard: React.FC = () => {
 
           <div className="flex items-center gap-3">
             <a
-              href="http://localhost:8501"
+              href="/docs"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 cursor-pointer"
             >
               <Terminal className="h-4 w-4 text-slate-500" />
-              <span>Launch Local Streamlit (Port 8501)</span>
+              <span>FastAPI Documentation</span>
               <ExternalLink className="h-3 w-3 text-slate-400" />
             </a>
           </div>

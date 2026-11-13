@@ -22,7 +22,11 @@ python -m venv .venv
 
 ### 3. Install Dependencies
 ```powershell
+# Python backend dependencies
 pip install -r requirements.txt
+
+# React frontend dependencies (works from repository root or inside frontend/)
+npm install
 ```
 
 ### 4. Environment & Threshold Configuration
@@ -37,23 +41,30 @@ pip install -r requirements.txt
    *(Optional override: `FINOVALABS_SEC_USER_AGENT="FinovaLabs your.name@yourdomain.com"`)*
 3. Thresholds, SEC rate limits, database path, and log paths live in [config.yaml](config.yaml) (defaults: `auto_approve_threshold: 0.90`, `yoy_change_alert_threshold: 0.30`, `accounting_identity_tolerance: 0.0005`, `segment_reconciliation_tolerance: 0.02`).
 
-### 5. Initialize SQLite Database
-The database initializes automatically on first launch, or you can initialize and inspect it manually:
-```powershell
-python -c "import sys; sys.path.insert(0, 'src'); from finova_labs.database import init_db, check_db_health; print(init_db()); print(check_db_health())"
-```
-This creates `data/finova_labs.db` with all **8 core tables** (`audit_runs`, `sec_filings`, `extracted_metrics`, `review_tasks`, `validation_results`, `accuracy_evaluations`, `audit_events`, `idempotency_records`) plus LangGraph checkpoint tables.
+### 5. Launch the Application
 
-### 6. Launch the Application
+**Terminal 1 — FastAPI Backend Engine**:
 ```powershell
-streamlit run app.py
+cd C:\Users\Jagruti\FinovaLabs
+$env:PYTHONPATH="src"
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-Open the printed local URL (`http://localhost:8501`) to navigate all 5 pages:
-1. **Overview** — KPIs, governance routing charts, filing summaries, restart/recovery queue, and DB diagnostics
-2. **Filing Analysis** — Real company selection (`AAPL`, `MSFT`, `GOOGL`, `AMZN`, `WMT`), 10-K retrieval, 8-metric extraction, verbatim evidence snippets, confidence breakdowns, and validation rules
-3. **Human Review** — Reviewer dashboard for escalated tasks (`Approve`, `Correct Value`, `Reject`), subsequent amendments, and workflow resume
-4. **Accuracy Report** — Pre- vs. post-human-review SEC Company Facts comparison, explicit coverage denominators, company/metric charts, CSV/JSON exports
-5. **Audit Trail** — Append-only SHA-256 hash-chained decision ledger with Company, Date, Decision, Metric, and Run ID filters plus live integrity verification
+
+**Terminal 2 — React User Interface**:
+```powershell
+cd C:\Users\Jagruti\FinovaLabs
+npm run dev
+```
+Navigate to [http://localhost:5173/](http://localhost:5173/) to access the full auditing workspace:
+1. **Landing Page** (`/`) — Premium Originkit Hero 66 product introduction
+2. **Operational Overview** (`/app`) — SQLite status, active filings, and interrupted workflow recovery
+3. **New Audit** (`/app/audits/new`) — 3-step company search, filing selection, and LangGraph pipeline launch
+4. **Audit Workspace** (`/app/audits/:auditId`) — Normalized metrics, 5-factor confidence scoring, and evidence
+5. **Financial Analytics** (`/app/analytics`) — Performance time-series, YoY variance anomalies, and balance equation
+6. **Review Center** (`/app/reviews`) — Governed approval, correction, and rejection with audit trail commit
+7. **Reports & Ledger** (`/app/reports`) — Ground-truth accuracy benchmarks and tamper-evident SHA-256 chain
+
+*(Optional legacy Streamlit view: `streamlit run app.py` on port 8501)*
 
 ---
 

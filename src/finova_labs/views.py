@@ -56,16 +56,21 @@ from finova_labs.workflow import (
     submit_subsequent_review_correction,
 )
 from finova_labs.ui import (
+    LOGO_SVG,
+    MARK_MINI_SVG,
     TOOLTIP_CHECKPOINT,
     TOOLTIP_CONFIDENCE,
     TOOLTIP_EVIDENCE,
     TOOLTIP_PERIOD,
     TOOLTIP_UNIT,
     TOOLTIP_VALIDATION,
+    _LOGO_SVG,
+    _MARK_MINI_SVG,
     apply_design_system,
     flash_feedback,
     humanize_status,
     navigate_button,
+    render_analyst_glossary_strip,
     render_empty_state,
     render_error_banner,
     render_field_tooltips_popover,
@@ -79,6 +84,7 @@ from finova_labs.ui import (
     render_plotly_chart,
     render_status_table,
     render_welcome_panel,
+    render_work_status_strip,
     render_workflow_stepper,
     reset_ui_session_state,
     safe_execute,
@@ -184,11 +190,11 @@ def _bootstrap_page(
     summary = safe_execute(fetch_dashboard_summary, "workspace posture query")
     active_ticker = st.session_state.get("fl_active_ticker")
     open_cnt = int((summary or {}).get("open_reviews") or 0)
-    parts = [f"Selected: {active_ticker}" if active_ticker else "No active company"]
-    parts.append(f"{open_cnt} open review(s)" if open_cnt else "Review queue clear")
+    parts = [f"Company: {active_ticker}" if active_ticker else "No company selected yet"]
+    parts.append(f"{open_cnt} pending review(s)" if open_cnt else "No pending reviews")
     apply_design_system(
         section_name,
-        db_status_label="SQLite Connected",
+        db_status_label="Audit Store Connected",
         context_summary=" • ".join(parts),
     )
     st.session_state["fl_current_step"] = active_step
@@ -200,23 +206,37 @@ def _render_stepper_from_summary(active_step: int, summary: dict[str, Any] | Non
     eval_count = int(s.get("evaluations") or s.get("total_evaluations") or 0)
     if eval_count == 0 and s.get("evaluable_evaluations"):
         eval_count = int(s.get("evaluable_evaluations") or 0)
+    open_reviews = int(s.get("open_reviews") or 0)
+    paused_runs = int(s.get("paused_runs") or 0)
+    interrupted_runs = int(s.get("interrupted_runs") or 0)
+    failed_checks = int(s.get("failed_validations") or 0)
+    completed_runs = int(s.get("completed_runs") or 0)
+    resolved_reviews = int(s.get("resolved_reviews") or 0)
+
     render_workflow_stepper(
         active_step,
         companies_count=int(s.get("total_companies") or 0),
         filings_count=int(s.get("retrieved_filings") or 0),
         metrics_count=int(s.get("extracted_metrics") or 0),
         validations_count=int(s.get("validation_checks") or 0),
+        failed_checks=failed_checks,
         runs_count=int(s.get("total_runs") or 0),
-        open_reviews=int(s.get("open_reviews") or 0),
-        resolved_reviews=int(s.get("resolved_reviews") or 0),
+        open_reviews=open_reviews,
+        resolved_reviews=resolved_reviews,
         evaluations_count=eval_count,
         events_count=int(s.get("audit_events") or s.get("audit_events_count") or 0),
+    )
+    render_work_status_strip(
+        pending_count=open_reviews + paused_runs + interrupted_runs,
+        completed_count=completed_runs,
+        failed_count=failed_checks,
+        human_decisions_count=resolved_reviews,
     )
 
 
 def render_overview_page() -> None:
-    """Render the FinovaLabs Overview dashboard backed by real SQLite state."""
-    settings, summary = _bootstrap_page("Overview", active_step=1)
+    """Render the FinovaLabs operational audit workspace backed strictly by real database records."""
+    settings, summary = _bootstrap_page("Start & Audit Hub", active_step=1)
     if settings is None:
         render_footer()
         return
@@ -224,87 +244,94 @@ def render_overview_page() -> None:
     health = safe_execute(check_db_health, "database health check")
     filings = safe_execute(lambda: fetch_filing_metadata(limit=25), "SEC filings query") or []
     runs = safe_execute(lambda: fetch_runs(limit=25), "recent runs query") or []
-    all_metrics = safe_execute(lambda: fetch_extracted_metrics(limit=250), "overview metrics query") or []
     recoverable = safe_execute(lambda: fetch_recoverable_workflows(limit=20), "recoverable workflows") or []
+    open_review_tasks = safe_execute(lambda: fetch_review_tasks(status="OPEN", limit=50), "open review tasks query") or []
 
     db_ok = bool(health and health.get("healthy"))
-    open_reviews = int((summary or {}).get("open_reviews") or 0)
-    total_filings = int((summary or {}).get("retrieved_filings") or 0)
-    total_runs = int((summary or {}).get("total_runs") or 0)
+    total_filings = len(filings)
+    total_runs = len(runs)
+    open_reviews_count = len(open_review_tasks)
+    completed_runs_count = sum(1 for r in runs if r["status"] == "COMPLETED")
+    interrupted_runs_count = sum(
+        1 for w in recoverable
+        if w["status"] in ("INTERRUPTED", "PAUSED_FOR_REVIEW", "RUNNING", "PENDING")
+    )
+    failed_checks = int((summary or {}).get("failed_validations") or 0)
+    resolved_reviews_count = int((summary or {}).get("resolved_reviews") or 0)
     eval_denom = int((summary or {}).get("evaluations") or (summary or {}).get("evaluable_evaluations") or 0)
-    pre_matches = int((summary or {}).get("pre_exact_matches") or 0)
-    post_matches = int((summary or {}).get("post_exact_matches") or 0)
 
     if total_filings == 0:
-        posture_label, posture_tone = "Start Here • No Filings", "info"
+        posture_label, posture_tone = "Ready to Start • Select Company", "info"
         ov_stage = 1
     elif total_runs == 0:
-        posture_label, posture_tone = f"{total_filings} Filing(s) Ready", "info"
+        posture_label, posture_tone = f"{total_filings} 10-K(s) Ready for Audit", "info"
         ov_stage = 3
-    elif open_reviews > 0:
-        posture_label, posture_tone = f"{open_reviews} Escalation(s) Pending", "warning"
+    elif open_reviews_count > 0:
+        posture_label, posture_tone = f"{open_reviews_count} Pending Analyst Review(s)", "warning"
         ov_stage = 5
     elif recoverable:
-        posture_label, posture_tone = "Checkpoint Ready to Resume", "info"
+        posture_label, posture_tone = "Saved Audit Ready to Finish", "info"
         ov_stage = 5
     elif eval_denom == 0 and total_runs > 0:
-        posture_label, posture_tone = "Ready for SEC Accuracy Check", "info"
+        posture_label, posture_tone = "Ready for Final SEC Report", "info"
         ov_stage = 6
     else:
-        posture_label, posture_tone = ("Database Connected", "success") if db_ok else ("Database Attention Needed", "warning")
+        posture_label, posture_tone = ("All Audits Up to Date", "success") if db_ok else ("Workspace Attention Needed", "warning")
         ov_stage = 7
 
     render_page_header(
-        title=f"{PRODUCT_NAME} Overview",
-        subtitle="Track live portfolio audit status, inspect saved checkpoints, or follow the guided SEC 10-K audit workflow.",
+        title=f"{PRODUCT_NAME} Operational Audit Workspace",
+        subtitle="Operational command center: initiate filings, monitor real compliance checkpoints, and resolve reviews.",
         status_label=posture_label,
         status_tone=posture_tone,
     )
     _render_stepper_from_summary(ov_stage, summary)
     render_flash_feedback()
-    render_welcome_panel(allow_dismiss=True)
+
+    # 1. Concise Welcome and Primary Action: Start a new audit
+    render_welcome_panel(allow_dismiss=True, primary_label="Start a new audit", primary_url="filing-analysis")
     render_guided_tour_panel("overview")
 
-    # Guided Primary Next Action & Expected Result explaining current audit posture
+    # 2. Audit Workflow Status Area with Next Important Action Visually Obvious
     resumable_ready = [
         w for w in recoverable
         if w["status"] in ("INTERRUPTED", "RUNNING", "PENDING") or int(w.get("open_review_count", 0)) == 0
     ]
     if total_filings == 0:
-        ov_status = "Your SQLite workspace is initialized cleanly with zero filings."
-        ov_next = "Open Filing Analysis to select one or more supported companies and click 'Retrieve Latest 10-K Filings'."
-        ov_expect = "FinovaLabs resolves official CIKs from SEC EDGAR, downloads the latest Form 10-K metadata, and saves deduplicated records in SQLite."
-        next_label, next_target = "Start Audit in Filing Analysis →", "filing-analysis"
+        ov_status = "Your audit workspace is clean and ready. No company filings have been downloaded yet."
+        ov_next = "Click 'Start a new audit' on the right to choose a company and pull its latest SEC Form 10-K."
+        ov_expect = "FinovaLabs fetches authentic annual filings from SEC EDGAR and prepares them for metric extraction."
+        next_label, next_target = "Start a new audit ->", "filing-analysis"
     elif total_runs == 0:
-        ov_status = f"{total_filings} verified SEC Form 10-K filing(s) are stored and awaiting metric extraction."
-        ov_next = "Open Filing Analysis, select a stored filing, and click 'Extract 8 Core Financial Metrics'."
-        ov_expect = "Normalized USD/per-share figures, verbatim filing citations, 5-factor confidence scores, and Accounting/Segment/YoY validations appear in seconds."
-        next_label, next_target = "Extract Metrics in Filing Analysis →", "filing-analysis"
-    elif open_reviews > 0:
-        ov_status = f"{open_reviews} escalated metric(s) are paused at checkpoint review and require an analyst decision."
-        ov_next = "Open Human Review to compare the extracted figure side-by-side against filing evidence and click Approve, Correct Value, or Reject."
-        ov_expect = "Your decision and SHA-256 audit record commit atomically, preserving the original value while unblocking checkpoint resume."
-        next_label, next_target = f"Resolve {open_reviews} Escalation(s) →", "human-review"
+        ov_status = f"You have {total_filings} downloaded Form 10-K filing(s) ready for extraction and accounting validation."
+        ov_next = "Click 'Start Extraction & Checks ->' to gather the 8 standardized financial figures and verify rules."
+        ov_expect = "Extracts figures with exact quotes, calculates certainty scores, and runs equation checks."
+        next_label, next_target = "Start Extraction & Checks ->", "filing-analysis"
+    elif open_reviews_count > 0:
+        ov_status = f"{open_reviews_count} item(s) require analyst sign-off before the audit can proceed ({failed_checks} failed accounting check(s))."
+        ov_next = "Click 'Resolve Pending Reviews ->' to compare each flagged figure against its 10-K quote and approve, correct, or reject it."
+        ov_expect = "Analyst decision and audit justification are recorded permanently while preserving original values."
+        next_label, next_target = f"Resolve {open_reviews_count} Pending Review(s) ->", "human-review"
     elif resumable_ready:
-        ov_status = f"{len(resumable_ready)} saved workflow checkpoint(s) are cleared and ready to resume without repeating extraction."
-        ov_next = "Click 'Resume Workflow' under Saved Workflows & Restart Recovery below (or inspect in Human Review)."
-        ov_expect = "LangGraph continues from the saved checkpoint and completes the run without duplicating metrics or decisions."
-        next_label, next_target = "Review Checkpoints in Human Review →", "human-review"
+        ov_status = f"{len(resumable_ready)} saved filing audit(s) have cleared all review checkpoints and are ready to finalize."
+        ov_next = "Click 'Resume Saved Audit ->' to finish processing without repeating completed extraction steps."
+        ov_expect = "FinovaLabs continues from the checkpoint and prepares the audit for SEC benchmark comparison."
+        next_label, next_target = "Review Saved Audits ->", "human-review"
     elif eval_denom == 0:
-        ov_status = f"All {total_runs} filing audit run(s) completed with zero open escalations."
-        ov_next = "Open Accuracy Report and click 'Evaluate vs. SEC Facts' to benchmark your extracted values."
-        ov_expect = "Separate Pre-Review and Post-Review accuracy rates, denominators, and Ground-Truth coverage charts plus CSV/JSON downloads."
-        next_label, next_target = "Benchmark Accuracy vs. SEC →", "accuracy-report"
+        ov_status = f"All {total_runs} filing audit(s) have passed review sign-off with zero pending items."
+        ov_next = "Click 'Obtain Final SEC Report ->' to compare your figures against official SEC Company Facts and export reports."
+        ov_expect = "Produces line-by-line accuracy comparison, coverage breakdown, and downloadable CSV/JSON audit reports."
+        next_label, next_target = "Obtain Final SEC Report ->", "accuracy-report"
     else:
-        ov_status = f"{total_runs} audit run(s) complete and {eval_denom} metric benchmark record(s) verified against SEC Company Facts."
-        ov_next = "Open Audit Trail to verify sequential SHA-256 hash links and filter reviewer decisions, or audit another company."
-        ov_expect = "Full chronological provenance (`Original` -> `Corrected`, timestamps, explanations) verified tamper-evident."
-        next_label, next_target = "Inspect Audit Trail →", "audit-trail"
+        ov_status = f"{total_runs} audit(s) completed and {eval_denom} figures verified against official SEC filings."
+        ov_next = "Click 'Inspect Audit Trail ->' to review all analyst decisions, or click 'Start a new audit' to audit another company."
+        ov_expect = "Complete chronological ledger with SHA-256 integrity verification, original amounts, and corrected values."
+        next_label, next_target = "Inspect Audit Trail ->", "audit-trail"
 
     with st.container(border=True):
-        ac_left, ac_right = st.columns([3, 1.1])
+        ac_left, ac_right = st.columns([3, 1.25])
         with ac_left:
-            st.markdown(f"**Current Audit Posture:** {ov_status}")
+            st.markdown(f"**Current Operational Status:** {ov_status}")
             render_next_action_box(next_action=ov_next, expected_result=ov_expect)
         with ac_right:
             navigate_button(
@@ -312,48 +339,18 @@ def render_overview_page() -> None:
                 next_target,
                 key="ov_primary_next_cta",
                 primary=True,
-                help_text="Jump directly to the recommended next workflow screen.",
+                help_text="Take the primary operational next step in your audit workflow.",
             )
             render_field_tooltips_popover()
 
-    if summary is not None:
-        if eval_denom > 0:
-            acc_value = f"{(pre_matches / eval_denom):.1%} / {(post_matches / eval_denom):.1%}"
-            acc_detail = f"Pre ({pre_matches}/{eval_denom}) vs. Post ({post_matches}/{eval_denom}) SEC GT"
-        else:
-            acc_value = "—"
-            acc_detail = "Run Accuracy Report benchmarks to measure"
-
-        # Symmetrical 4-card KPI row (no orphaned 4+2 layout)
-        render_metric_cards(
-            [
-                {
-                    "label": "Companies & 10-Ks",
-                    "value": f"{summary['total_companies']} / {summary['retrieved_filings']}",
-                    "detail": f"{summary['total_runs']} audit run(s) ({summary['completed_runs']} done, {summary['paused_runs']} paused)",
-                },
-                {
-                    "label": "Auto-Approved Metrics",
-                    "value": f"{summary['auto_approved_metrics']} / {summary['extracted_metrics']}",
-                    "detail": "Passed ≥90% confidence & financial rules",
-                },
-                {
-                    "label": "Open Escalations",
-                    "value": str(summary["open_reviews"]),
-                    "detail": f"{summary['resolved_reviews']} resolved of {summary['total_escalations']} total",
-                },
-                {
-                    "label": "SEC Accuracy (Pre / Post)",
-                    "value": acc_value,
-                    "detail": acc_detail,
-                },
-            ]
-        )
-
+    # 3. Interrupted Workflows Ready to Resume
     if recoverable:
-        st.markdown('<div class="fl-section-title">Saved Workflows & Restart Recovery</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="fl-section-title">Interrupted Workflows Ready to Resume ({len(recoverable)})</div>',
+            unsafe_allow_html=True,
+        )
         st.caption(
-            "Checkpointed workflows remain durable in SQLite across application restarts and never re-run completed stages."
+            "Every step is checkpointed in SQLite so restarting FinovaLabs resumes right where you stopped without repeating completed stages."
         )
         rec_rows = [
             [
@@ -366,9 +363,10 @@ def render_overview_page() -> None:
             for w in recoverable
         ]
         render_status_table(
-            headers=["Run ID", "Company / Accession", "Last Checkpoint", "Open Reviews", "Status"],
+            headers=["Audit ID", "Company / Filing", "Saved Step", "Pending Reviews", "Status"],
             rows=rec_rows,
             right_align_cols={3},
+            min_width="680px",
         )
         for w in recoverable:
             open_cnt = int(w.get("open_review_count", 0))
@@ -376,10 +374,10 @@ def render_overview_page() -> None:
                 if st.button(
                     f"Resume Workflow {w['run_id']} ({w.get('current_stage') or humanize_status(w['status'])})",
                     key=f"overview_resume_{w['run_id']}",
-                    type="primary",
-                    help="Consequential action: resumes LangGraph execution from its saved SQLite checkpoint without duplicating completed stages.",
+                    type="secondary",
+                    help="Continues this saved audit from where it stopped without repeating finished steps.",
                 ):
-                    with st.spinner(f"Resuming checkpointed workflow {w['run_id']}..."):
+                    with st.spinner(f"Continuing saved audit {w['run_id']}..."):
                         outcome = safe_execute(
                             lambda rid=w["run_id"]: resume_audit_workflow(rid),
                             "workflow resume",
@@ -387,130 +385,194 @@ def render_overview_page() -> None:
                     if outcome is not None:
                         flash_feedback(
                             "success",
-                            f"Workflow `{outcome.run_id}` resumed cleanly from checkpoint -> `{humanize_status(outcome.status)}`.",
+                            f"Saved audit `{outcome.run_id}` finished cleanly -> `{humanize_status(outcome.status)}`.",
                         )
                         st.rerun()
             else:
                 r_col1, r_col2 = st.columns([3, 1])
                 with r_col1:
                     st.warning(
-                        f"Run `{w['run_id']}` is paused with **{open_cnt}** open escalation(s). Resolve them before resuming."
+                        f"Audit `{w['run_id']}` is paused with **{open_cnt}** pending review(s). Resolve them before finalizing."
                     )
                 with r_col2:
                     navigate_button(
-                        "Open Human Review →",
+                        "Review Now ->",
                         "human-review",
                         key=f"ov_jump_hr_{w['run_id']}",
                         primary=False,
                     )
 
-    if runs:
-        ov_c1, ov_c2 = st.columns([3, 2])
-        with ov_c1:
-            st.markdown('<div class="fl-section-title">Recent Filing Audit Runs</div>', unsafe_allow_html=True)
-            rows = [
-                [
-                    f"{r.get('ticker') or r['cik']}",
-                    r.get("accession_number") or r["run_id"],
-                    r["form_type"],
-                    r.get("current_stage") or "—",
-                    _format_confidence(r.get("overall_confidence")),
-                    (humanize_status(r["status"]), _status_tone_for_run(r["status"])),
-                ]
-                for r in runs
+    # 4. Pending Human Reviews
+    if open_review_tasks:
+        st.markdown(
+            f'<div class="fl-section-title">Pending Human Reviews ({len(open_review_tasks)})</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Figures below 90% certainty or with failed accounting checks pause safely for analyst sign-off.")
+        rev_rows = [
+            [
+                t.get("ticker") or t.get("cik") or "—",
+                t.get("metric_name") or "—",
+                t.get("reason") or "Flagged for manual review",
+                _format_decimal_metric(t.get("normalized_decimal"), t.get("raw_value"), t.get("unit") or "USD"),
+                (humanize_status(t.get("status") or "OPEN"), "warning"),
             ]
-            render_status_table(
-                headers=["Company", "Accession", "Form", "Stage", "Confidence", "Status"],
-                rows=rows,
-                right_align_cols={4},
+            for t in open_review_tasks[:10]
+        ]
+        render_status_table(
+            headers=["Company", "Metric", "Review Reason", "Extracted Value", "Status"],
+            rows=rev_rows,
+            right_align_cols={3},
+            min_width="680px",
+        )
+        p_c1, p_c2 = st.columns([3, 1.25])
+        with p_c1:
+            st.info(f"**{len(open_review_tasks)} item(s)** require analyst sign-off before these audits can proceed to the final report.")
+        with p_c2:
+            navigate_button(
+                f"Resolve {len(open_review_tasks)} Review(s) ->",
+                "human-review",
+                key="ov_resolve_reviews_cta",
+                primary=True,
+                help_text="Open the Human Review queue to approve, correct, or reject pending figures.",
             )
-        with ov_c2:
-            run_chart_rows = [
-                {
-                    "Run": f"{r.get('ticker') or r['cik']} ({r['run_id'][-4:]})",
-                    "Confidence (%)": round((r.get("overall_confidence") or 0.0) * 100.0, 2),
-                    "Status": humanize_status(r["status"]),
-                }
-                for r in reversed(runs[:10])
-                if r.get("overall_confidence") is not None
+
+    # 5. Recent Audit Activity
+    if runs:
+        st.markdown('<div class="fl-section-title">Recent Audit Activity</div>', unsafe_allow_html=True)
+        rows = [
+            [
+                f"{r.get('ticker') or r['cik']}",
+                r.get("accession_number") or r["run_id"],
+                r["form_type"],
+                r.get("current_stage") or "—",
+                _format_confidence(r.get("overall_confidence")),
+                (humanize_status(r["status"]), _status_tone_for_run(r["status"])),
             ]
-            if run_chart_rows:
-                st.markdown('<div class="fl-section-title">Confidence vs. 90% Cutoff</div>', unsafe_allow_html=True)
-                run_df = pd.DataFrame(run_chart_rows)
-                fig_runs = px.bar(
-                    run_df,
-                    x="Run",
-                    y="Confidence (%)",
-                    color="Status",
-                    color_discrete_map={
-                        "Completed": "#059669",
-                        "Completed (With Rejections)": "#D97706",
-                        "Paused for Review": "#2563EB",
-                        "Interrupted": "#D97706",
-                        "Running": "#1D4ED8",
-                        "Failed": "#DC2626",
-                    },
-                )
-                fig_runs.add_hline(
-                    y=settings.confidence.auto_approve_threshold * 100.0,
-                    line_dash="dash",
-                    line_color="#0B1E36",
-                    annotation_text=f"Cutoff ({settings.confidence.auto_approve_threshold:.0%})",
-                )
-                fig_runs.update_yaxes(range=[0, 108])
-                render_plotly_chart(
-                    fig_runs,
-                    key="overview_run_conf_bar",
-                    height=300,
-                )
+            for r in runs[:10]
+        ]
+        render_status_table(
+            headers=["Company", "Filing Ref", "Form", "Saved Step", "Confidence", "Status"],
+            rows=rows,
+            right_align_cols={4},
+            min_width="680px",
+        )
+        r_act_c1, r_act_c2 = st.columns([3, 1.25])
+        with r_act_c1:
+            sel_run_id = st.selectbox(
+                "Select an audit to inspect results:",
+                options=[r["run_id"] for r in runs[:10]],
+                format_func=lambda rid: next(
+                    (f"{r.get('ticker') or r['cik']} • Stage: {r.get('current_stage') or '—'} • {humanize_status(r['status'])} ({rid})" for r in runs if r["run_id"] == rid),
+                    str(rid),
+                ),
+                key="ov_run_quick_sel",
+            )
+        with r_act_c2:
+            if st.button(
+                "Inspect Audit Results ->",
+                key="ov_btn_inspect_run",
+                type="secondary",
+                help="Inspect the extracted figures and review results for this run.",
+                **stretch_width_kwargs(st.button),
+            ):
+                target_r = next((r for r in runs if r["run_id"] == sel_run_id), None)
+                if target_r:
+                    st.session_state["fl_active_ticker"] = target_r.get("ticker")
+                    st.session_state["fl_active_accession"] = target_r.get("accession_number")
+                pages_map = st.session_state.get("fl_pages")
+                target_page = "accuracy-report" if (target_r and target_r.get("status") == "COMPLETED") else "filing-analysis"
+                if isinstance(pages_map, dict) and target_page in pages_map:
+                    st.switch_page(pages_map[target_page])
+                else:
+                    st.rerun()
     else:
         render_empty_state(
-            title="No filing audit runs recorded yet",
+            title="No company audits started yet",
             description=(
-                "FinovaLabs never fabricates financial numbers or run history. Real audit rows appear "
-                "here as soon as you retrieve a 10-K and run extraction in Filing Analysis."
+                "FinovaLabs works strictly with real SEC Form 10-K filings and never invents numbers. "
+                "Start an audit to retrieve filings, extract 8 standardized figures, and validate accounting rules."
             ),
-            badge_label="Empty State • Ready",
-            next_step="Use 'Start Audit in Filing Analysis →' above to process your first company.",
+            badge_label="Ready to Begin",
+            next_step="Click 'Start a new audit' above to select your first company.",
         )
 
+    # 6. Small Recent Filings Table
     if filings:
-        with st.expander(f"Retrieved SEC 10-K Filings ({len(filings)})", expanded=False):
-            filing_rows = [
-                [
-                    f.get("company_name") or "—",
-                    f.get("ticker") or f["cik"],
-                    f["form_type"],
-                    f["filing_date"],
-                    str(f["fiscal_year"]) if f.get("fiscal_year") else "—",
-                    (humanize_status(f.get("retrieval_status") or "RETRIEVED"), "success"),
-                ]
-                for f in filings
+        st.markdown(f'<div class="fl-section-title">Recent SEC 10-K Filings ({len(filings)})</div>', unsafe_allow_html=True)
+        filing_rows = [
+            [
+                f"{f.get('ticker') or f['cik']} — {f.get('company_name') or 'Public Issuer'}",
+                f.get("form_type") or "10-K",
+                f"FY {f['fiscal_year']}" if f.get("fiscal_year") else (f.get("reporting_period") or f.get("filing_date") or "Annual"),
+                (humanize_status(f.get("retrieval_status") or "RETRIEVED"), "success"),
+                (f.get("fetched_at") or f.get("filing_date") or "—")[:19],
             ]
-            render_status_table(
-                headers=["Company Name", "Ticker", "Form", "Filing Date", "Fiscal Year", "Status"],
-                rows=filing_rows,
-                right_align_cols={4},
+            for f in filings[:10]
+        ]
+        render_status_table(
+            headers=["Company", "Form", "Filing Period", "Status", "Last Updated"],
+            rows=filing_rows,
+            min_width="680px",
+        )
+        f_act_c1, f_act_c2 = st.columns([3, 1.25])
+        with f_act_c1:
+            sel_filing_accn = st.selectbox(
+                "Select a filing to inspect or start audit:",
+                options=[f.get("accession_number") for f in filings[:10]],
+                format_func=lambda a: next(
+                    (f"{f.get('ticker')} • {f.get('form_type') or '10-K'} ({f.get('fiscal_year') or f.get('filing_date')}) • Accn: {a}" for f in filings if f.get("accession_number") == a),
+                    str(a),
+                ),
+                key="ov_filing_quick_sel",
             )
+        with f_act_c2:
+            if st.button(
+                "Audit Selected 10-K ->",
+                key="ov_btn_audit_filing",
+                type="primary",
+                help="Jump directly to Filing Analysis with this company filing active.",
+                **stretch_width_kwargs(st.button),
+            ):
+                target_f = next((f for f in filings if f.get("accession_number") == sel_filing_accn), None)
+                if target_f:
+                    st.session_state["fl_active_ticker"] = target_f.get("ticker")
+                    st.session_state["fl_active_accession"] = target_f.get("accession_number")
+                pages_map = st.session_state.get("fl_pages")
+                if isinstance(pages_map, dict) and "filing-analysis" in pages_map:
+                    st.switch_page(pages_map["filing-analysis"])
+                else:
+                    st.rerun()
+    elif not runs:
+        render_empty_state(
+            title="No SEC filings in workspace",
+            description=(
+                "Choose from Apple, Microsoft, Alphabet, Amazon, or Walmart in Filing Analysis "
+                "to retrieve an authentic SEC Form 10-K."
+            ),
+            badge_label="Workspace Ready",
+            next_step="Click 'Start a new audit' above to select your first company.",
+        )
 
-    with st.expander("System Configuration, Safe Restart & Reset Options", expanded=(not db_ok)):
+    # 7. System Maintenance & Audit Store Integrity
+    with st.expander("System Settings, Safe Restart & Workspace Maintenance", expanded=(not db_ok)):
         col_left, col_right = st.columns([3, 1])
         with col_left:
             if health is not None:
                 size_kb = health["size_bytes"] / 1024
                 render_info_card(
-                    title="SQLite Persistence & Policy Thresholds",
+                    title="Audit Store & Policy Rules",
                     body=(
-                        f"Database: {health['db_path']} (SQLite {health['sqlite_version']}, {size_kb:.1f} KB). "
-                        f"Logs: {settings.log_file}. Auto-approve ≥ {settings.confidence.auto_approve_threshold:.0%}, "
+                        f"Storage: {health['db_path']} (SQLite {health['sqlite_version']}, {size_kb:.1f} KB). "
+                        f"Logs: {settings.log_file}. Auto-approve threshold ≥ {settings.confidence.auto_approve_threshold:.0%}, "
                         f"YoY alert ±{settings.validation.yoy_change_alert_threshold:.0%}."
                     ),
                     badge_label=f"{len(CORE_TABLES)}/{len(CORE_TABLES)} Tables Ready" if db_ok else "Schema Incomplete",
                     badge_tone="success" if db_ok else "danger",
                 )
         with col_right:
-            if st.button("Verify DB Health", type="primary", **stretch_width_kwargs(st.button)):
-                with st.spinner("Checking SQLite schema integrity..."):
+            if st.button("Verify DB Health", type="secondary", **stretch_width_kwargs(st.button)):
+                with st.spinner("Checking audit store integrity..."):
                     recheck = safe_execute(check_db_health, "live database health check")
                 if recheck and recheck["healthy"]:
                     st.success(f"SQLite OK ({recheck['sqlite_version']})")
@@ -520,33 +582,32 @@ def render_overview_page() -> None:
         st.markdown("---")
         sr_c1, sr_c2 = st.columns(2)
         with sr_c1:
-            st.markdown("**Safe App Restart & UI Reset (Keeps All Real Data)**")
+            st.markdown("**Safe UI Reset (Keeps All Saved Audits)**")
             st.caption(
-                "Restarting the Streamlit server or refreshing your browser never deletes SQLite filings, "
-                "metrics, human decisions, or the SHA-256 audit ledger. Use the button below to restore the "
-                "Welcome panel, restart the guided tour, and clear UI filters safely."
+                "Refreshing or restarting FinovaLabs never deletes downloaded filings, human decisions, or audit history. "
+                "Use this button only to reopen the Welcome banner, restart the guided tour, and clear screen filters."
             )
             if st.button(
                 "Reset UI & Restart Welcome / Tour",
                 key="ov_reset_ui_only",
-                help="Non-destructive: resets only browser session state. Zero SQLite rows are altered.",
+                help="Non-destructive: resets only screen state and tour preferences.",
                 **stretch_width_kwargs(st.button),
             ):
                 reset_ui_session_state()
                 flash_feedback(
                     "info",
-                    "UI filters, welcome panel, and guided tour were reset safely. Real SQLite records remain intact.",
+                    "Screen filters, welcome panel, and guided tour were reset safely. Saved audits remain intact.",
                 )
                 st.rerun()
 
         with sr_c2:
-            st.markdown("**Clear Local Demo Database (Explicit Confirmation Required)**")
+            st.markdown("**Clear Local Workspace Data (Explicit Confirmation Required)**")
             st.caption(
-                "Compliance data is never deleted automatically or via single click. Only use this if you "
-                "explicitly want to wipe your local SQLite tables back to an empty genesis state."
+                "Saved compliance records are never deleted automatically. Use this only if you explicitly want to "
+                "clear all local filings, reviews, and decision history."
             )
             wipe_cb = st.checkbox(
-                "I confirm I want to permanently delete all local SQLite filings, metrics, review decisions, evaluations, and audit history.",
+                "I confirm I want to permanently delete all local filings, metrics, review decisions, evaluations, and audit history.",
                 value=False,
                 key="ov_wipe_confirm_cb",
             )
@@ -570,7 +631,7 @@ def render_overview_page() -> None:
                     total_removed = sum(removed.values())
                     flash_feedback(
                         "warning",
-                        f"Confirmed local SQLite workspace reset removed {total_removed} record(s) across core tables.",
+                        f"Confirmed local workspace reset removed {total_removed} record(s).",
                     )
                     st.rerun()
 
@@ -578,8 +639,8 @@ def render_overview_page() -> None:
 
 
 def render_filing_analysis_page() -> None:
-    """Render the Filing Analysis page with guided retrieval, extraction, and inspection."""
-    settings, summary = _bootstrap_page("Filing Analysis", active_step=2)
+    """Render the Filing Analysis page with plain-English 10-K retrieval, extraction, and checks."""
+    settings, summary = _bootstrap_page("Select Company & 10-K", active_step=2)
     if settings is None:
         render_footer()
         return
@@ -590,9 +651,9 @@ def render_filing_analysis_page() -> None:
 
     fa_stage = 1 if not filings else (2 if not runs else 4)
     render_page_header(
-        title="Filing Analysis",
-        subtitle="Select supported public companies, retrieve official SEC Form 10-K filings, extract 8 core metrics, and inspect evidence and validations.",
-        status_label=f"{len(filings)} Filing(s) Stored" if filings else "Step 1: Select Company",
+        title="Select Company & 10-K",
+        subtitle="Pick a public company, pull its latest SEC Form 10-K filing, extract 8 core financial figures, and verify accounting rules.",
+        status_label=f"{len(filings)} 10-K Filing(s) Downloaded" if filings else "Step 1: Pick Company",
         status_tone="success" if filings else "info",
     )
     _render_stepper_from_summary(fa_stage, summary)
@@ -600,14 +661,14 @@ def render_filing_analysis_page() -> None:
     render_guided_tour_panel("filing-analysis")
 
     if not filings:
-        fa_next = "Pick one or more supported companies in Step 1 below and click 'Retrieve Latest 10-K Filings'."
-        fa_expect = "FinovaLabs resolves official CIKs from SEC EDGAR, downloads Form 10-K metadata + Company Facts JSON, and unlocks Step 2."
+        fa_next = "Step 1 below: choose one or more companies and click 'Retrieve Latest 10-K Filings'."
+        fa_expect = "FinovaLabs pulls the latest annual Form 10-K directly from SEC EDGAR and unlocks Step 2."
     elif not runs:
-        fa_next = "Choose your retrieved filing in Step 2 and click 'Extract 8 Core Financial Metrics'."
-        fa_expect = "Extracts normalized USD & Diluted EPS figures with verbatim HTML citations, 5-factor confidence scores, and validation checks."
+        fa_next = "Step 2 below: choose your downloaded filing and click 'Extract 8 Core Financial Metrics'."
+        fa_expect = "Standardized USD and Diluted EPS figures appear with 10-K quotes, certainty scores, and accounting validation checks."
     else:
-        fa_next = "Inspect the extracted metrics, confidence breakdown, and validations in Step 3 below, or click the recommended next-screen button."
-        fa_expect = "Any low-confidence (<90%) or failed-validation metric pauses a SQLite checkpoint for Human Review; clean runs proceed straight to Accuracy Report."
+        fa_next = "Review the extracted figures, quotes, and check results in Step 3 below, or click the highlighted next-step button."
+        fa_expect = "Items under 90% certainty or with failed accounting checks pause safely for Human Review; passing runs move to Final SEC Report."
 
     fa_guide_l, fa_guide_r = st.columns([3.4, 1.0])
     with fa_guide_l:
@@ -628,7 +689,7 @@ def render_filing_analysis_page() -> None:
         )
 
     # Step 1: Select Companies & Retrieve Real SEC 10-K
-    st.markdown('<div class="fl-section-title">Step 1 · Select Companies & Retrieve SEC 10-K</div>', unsafe_allow_html=True)
+    st.markdown('<div class="fl-section-title">Step 1 · Select Companies & Download Latest SEC 10-K</div>', unsafe_allow_html=True)
     option_map = {c.display_name: c.ticker for c in supported}
     all_labels = list(option_map.keys())
     if "fa_selected_labels" not in st.session_state:
@@ -640,14 +701,16 @@ def render_filing_analysis_page() -> None:
         else:
             st.session_state["fa_selected_labels"] = all_labels[:1]
 
+    retrieve_btn_type = "primary" if not filings else "secondary"
+
     with st.container(border=True):
         col_sel, col_opts, col_btn = st.columns([3, 1, 1.3])
         with col_sel:
             selected_labels = st.multiselect(
-                "Supported companies (dynamic CIK lookup via SEC EDGAR)",
+                "Choose public companies to audit",
                 options=all_labels,
                 key="fa_selected_labels",
-                help="Select one or more companies. CIKs are resolved dynamically from SEC company_tickers.json.",
+                help="Select one or more supported companies. FinovaLabs looks up their official SEC identifiers live.",
             )
         with col_opts:
             st.checkbox(
@@ -657,24 +720,23 @@ def render_filing_analysis_page() -> None:
                 on_change=_sync_select_all,
             )
             force_refresh = st.checkbox(
-                "Force SEC refresh",
+                "Re-download fresh copy",
                 value=False,
-                help="Bypass local SEC disk cache and re-download JSON from data.sec.gov.",
+                help="Skip the saved local copy and pull a fresh Form 10-K from SEC EDGAR.",
             )
         with col_btn:
-            st.write("")
             retrieve_clicked = st.button(
                 "Retrieve Latest 10-K Filings",
-                type="primary",
+                type=retrieve_btn_type,
                 disabled=not ua_ok,
-                help="Fetches latest Form 10-K metadata and Company Facts from SEC EDGAR and saves deduplicated records to SQLite.",
+                help="Downloads the latest official SEC Form 10-K metadata and financial facts for the selected companies.",
                 **stretch_width_kwargs(st.button),
             )
 
-        with st.expander("SEC EDGAR Connection & Cache Policy", expanded=False):
+        with st.expander("SEC Connection & Cache Details", expanded=False):
             st.caption(
-                f"User-Agent: `{ua_display}` • Rate Ceiling: `{settings.sec.max_requests_per_second} req/s` • "
-                f"Timeout: `{settings.sec.request_timeout_seconds}s` • Cache: `{settings.cache_path}`"
+                f"SEC Contact Header: `{ua_display}` • Speed Limit: `{settings.sec.max_requests_per_second} req/s` • "
+                f"Timeout: `{settings.sec.request_timeout_seconds}s` • Cache Folder: `{settings.cache_path}`"
             )
 
         if retrieve_clicked:
@@ -685,7 +747,7 @@ def render_filing_analysis_page() -> None:
                 progress_bar = st.progress(0.0)
                 with st.status("Connecting to SEC EDGAR...", expanded=True) as status_box:
                     def _on_progress(idx: int, total: int, ticker: str) -> None:
-                        status_box.write(f"Resolving CIK and retrieving latest 10-K for **{ticker}** ({idx}/{total})...")
+                        status_box.write(f"Looking up official SEC record and latest 10-K for **{ticker}** ({idx}/{total})...")
                         progress_bar.progress((idx - 1) / total)
 
                     outcomes = retrieve_selected_companies(
@@ -701,18 +763,18 @@ def render_filing_analysis_page() -> None:
                     failed = len(outcomes) - succeeded
                     if failed == 0:
                         status_box.update(
-                            label=f"Retrieved {succeeded}/{len(outcomes)} latest 10-K filing(s) from SEC EDGAR.",
+                            label=f"Downloaded {succeeded}/{len(outcomes)} latest 10-K filing(s) from SEC EDGAR.",
                             state="complete",
                             expanded=False,
                         )
                         flash_feedback(
                             "success",
-                            f"Retrieved {succeeded}/{len(outcomes)} latest Form 10-K filing(s). Next: select a filing below and click 'Extract 8 Core Financial Metrics'.",
+                            f"Downloaded {succeeded}/{len(outcomes)} latest Form 10-K filing(s). Next: select a filing below and click 'Extract 8 Core Financial Metrics'.",
                         )
                         st.rerun()
                     else:
                         status_box.update(
-                            label=f"Completed with {succeeded} retrieved and {failed} failed.",
+                            label=f"Completed with {succeeded} downloaded and {failed} failed.",
                             state="error",
                             expanded=True,
                         )
@@ -729,7 +791,7 @@ def render_filing_analysis_page() -> None:
             )
 
     if filings:
-        with st.expander(f"Stored 10-K Filings in SQLite ({len(filings)})", expanded=False):
+        with st.expander(f"Downloaded 10-K Filings Ready in Workspace ({len(filings)})", expanded=False):
             filing_rows = [
                 [
                     f.get("company_name") or "—",
@@ -744,13 +806,13 @@ def render_filing_analysis_page() -> None:
                 for f in filings
             ]
             render_status_table(
-                headers=["Company", "Ticker", "CIK", "Form", "Filing Date", "FY", "Accession #", "Status"],
+                headers=["Company", "Ticker", "SEC ID (CIK)", "Form", "Filing Date", "Fiscal Year", "Filing Number", "Status"],
                 rows=filing_rows,
                 right_align_cols={5},
             )
 
     # Step 2: Select Filing & Start Processing
-    st.markdown('<div class="fl-section-title">Step 2 · Run Audited 8-Metric Extraction & Validation</div>', unsafe_allow_html=True)
+    st.markdown('<div class="fl-section-title">Step 2 · Extract 8 Financial Figures & Run Accounting Checks</div>', unsafe_allow_html=True)
     selected_accn: str | None = None
     selected_filing_row: dict[str, Any] | None = None
     if filings:
@@ -777,7 +839,7 @@ def render_filing_analysis_page() -> None:
         }
         with sel_col2:
             chosen_label = st.selectbox(
-                "Select a retrieved 10-K filing to audit or inspect",
+                "Choose a downloaded Form 10-K filing to analyze",
                 list(filing_options.keys()),
                 key="fa_filing_selector",
             )
@@ -792,9 +854,9 @@ def render_filing_analysis_page() -> None:
             st.session_state["fl_active_run_id"] = latest_run["run_id"]
 
         render_info_card(
-            title=f"{selected_filing_row.get('company_name') or selected_filing_row['cik']} ({selected_filing_row.get('ticker') or '—'}) — {selected_filing_row['form_type']}",
+            title=f"{selected_filing_row.get('company_name') or selected_filing_row['cik']} ({selected_filing_row.get('ticker') or '—'}) — Form {selected_filing_row['form_type']}",
             body=(
-                f"CIK: {selected_filing_row['cik']} • Accession: {selected_filing_row['accession_number']} • "
+                f"SEC ID: {selected_filing_row['cik']} • Filing Number: {selected_filing_row['accession_number']} • "
                 f"Filed: {selected_filing_row['filing_date']} • Period End: {selected_filing_row.get('reporting_period') or '—'} • "
                 f"Fiscal Year: {selected_filing_row.get('fiscal_year') or '—'}"
             ),
@@ -805,7 +867,7 @@ def render_filing_analysis_page() -> None:
         act_c1, act_c2, act_c3 = st.columns([2.2, 1.5, 1.3])
         with act_c1:
             include_html = st.checkbox(
-                "Cross-check 10-K HTML Inline XBRL (scale & table evidence)",
+                "Cross-check full 10-K report tables for exact quotes & scale (Recommended)",
                 value=True,
                 help=f"{TOOLTIP_EVIDENCE} Also enables: {TOOLTIP_UNIT}",
             )
@@ -813,16 +875,17 @@ def render_filing_analysis_page() -> None:
             force_new_run = False
             if latest_run is not None:
                 force_new_run = st.checkbox(
-                    "Confirm fresh re-audit",
+                    "Start a fresh re-audit",
                     value=False,
-                    help=f"By default FinovaLabs idempotently reuses the existing saved run. {TOOLTIP_CHECKPOINT}",
+                    help=f"By default, FinovaLabs safely reuses the saved audit run without duplicating work. {TOOLTIP_CHECKPOINT}",
                     key=f"fa_confirm_rerun_{selected_accn}",
                 )
         with act_c3:
-            extract_label = "Re-Run Audit Workflow" if force_new_run else "Extract 8 Core Financial Metrics"
+            needs_extraction_cta = (latest_run is None) or force_new_run
+            extract_label = "Re-Run Filing Audit" if force_new_run else "Extract 8 Core Financial Metrics"
             run_clicked = st.button(
                 extract_label,
-                type="primary",
+                type="primary" if needs_extraction_cta else "secondary",
                 help=f"{TOOLTIP_CONFIDENCE} {TOOLTIP_VALIDATION} {TOOLTIP_CHECKPOINT}",
                 **stretch_width_kwargs(st.button),
             )
@@ -863,28 +926,28 @@ def render_filing_analysis_page() -> None:
                     validation_settings=settings.validation,
                 )
 
-            with st.status("Running audited extraction, confidence scoring & financial validations...", expanded=True) as ext_status:
+            with st.status("Extracting financial figures, scoring certainty, and running accounting checks...", expanded=True) as ext_status:
                 wf_outcome = safe_execute(_run_workflow, "audited workflow execution")
                 if wf_outcome is not None:
                     st.session_state["fl_active_run_id"] = wf_outcome.run_id
                     if wf_outcome.paused:
                         ext_status.update(
                             label=(
-                                f"Workflow {wf_outcome.run_id} PAUSED: "
+                                f"Audit {wf_outcome.run_id} PAUSED for Review: "
                                 f"{len(wf_outcome.auto_approved_metrics)} auto-approved, "
-                                f"{wf_outcome.open_task_count} escalated for Human Review."
+                                f"{wf_outcome.open_task_count} item(s) need analyst sign-off."
                             ),
                             state="complete",
                             expanded=False,
                         )
                         flash_feedback(
                             "warning",
-                            f"Run `{wf_outcome.run_id}` paused at checkpoint with {wf_outcome.open_task_count} escalated task(s). Open Human Review to resolve.",
+                            f"Audit `{wf_outcome.run_id}` paused with {wf_outcome.open_task_count} item(s) needing analyst review. Open '3. Resolve Human Reviews' to sign off.",
                         )
                     else:
-                        msg_prefix = "Reused saved run" if getattr(wf_outcome, "reused_existing_run", False) else "Completed run"
+                        msg_prefix = "Loaded saved audit" if getattr(wf_outcome, "reused_existing_run", False) else "Completed audit"
                         ext_status.update(
-                            label=f"{msg_prefix} {wf_outcome.run_id}: {len(wf_outcome.auto_approved_metrics)} metric(s) auto-approved.",
+                            label=f"{msg_prefix} {wf_outcome.run_id}: {len(wf_outcome.auto_approved_metrics)} figure(s) auto-approved.",
                             state="complete",
                             expanded=False,
                         )
@@ -894,45 +957,45 @@ def render_filing_analysis_page() -> None:
                         )
                     st.rerun()
                 else:
-                    ext_status.update(label="Audited workflow execution failed.", state="error", expanded=True)
+                    ext_status.update(label="Filing analysis failed.", state="error", expanded=True)
 
-        # Next-action CTA banner specific to this filing's live workflow posture
-        if latest_run is not None:
+        # Single obvious next-step CTA once this filing has been processed
+        if latest_run is not None and not force_new_run:
             if latest_run["status"] == "PAUSED_FOR_REVIEW":
-                n1, n2 = st.columns([3, 1])
+                n1, n2 = st.columns([3, 1.2])
                 with n1:
                     st.warning(
-                        f"**Action Needed:** Run `{latest_run['run_id']}` is paused at its LangGraph SQLite checkpoint awaiting Human Review."
+                        f"**Pending Analyst Sign-Off:** Audit `{latest_run['run_id']}` has paused with flagged items waiting for review."
                     )
                 with n2:
                     navigate_button(
-                        "Resolve in Human Review →",
+                        "Resolve Pending Reviews ->",
                         "human-review",
                         key=f"fa_next_hr_{selected_accn}",
                         primary=True,
                     )
             elif latest_run["status"] in ("COMPLETED", "COMPLETED_WITH_REJECTIONS"):
-                n1, n2 = st.columns([3, 1])
+                n1, n2 = st.columns([3, 1.2])
                 with n1:
                     st.success(
-                        f"**Audit Complete ({humanize_status(latest_run['status'])}):** Ready to benchmark against SEC Company Facts."
+                        f"**Ready for Final Report ({humanize_status(latest_run['status'])}):** All required sign-offs for this filing are complete."
                     )
                 with n2:
                     navigate_button(
-                        "Benchmark in Accuracy Report →",
+                        "Obtain Final SEC Report ->",
                         "accuracy-report",
                         key=f"fa_next_acc_{selected_accn}",
                         primary=True,
                     )
     else:
         render_empty_state(
-            title="Retrieve a 10-K filing in Step 1 first",
+            title="Download a 10-K filing in Step 1 first",
             description=(
-                "No saved Form 10-K filings exist in SQLite yet. Select a company above and click "
-                "'Retrieve Latest 10-K Filings' to unlock metric extraction."
+                "No SEC Form 10-K filings have been downloaded yet. Select one or more companies above and click "
+                "'Retrieve Latest 10-K Filings' to begin."
             ),
-            badge_label="Awaiting Retrieval",
-            next_step="Step 2 unlocks automatically once SEC EDGAR metadata is saved.",
+            badge_label="Step 1 Required",
+            next_step="Step 2 unlocks automatically once filing metadata is saved.",
         )
 
     metrics = (
@@ -952,13 +1015,15 @@ def render_filing_analysis_page() -> None:
         else None
     )
 
-    # Step 3: Inspect Extracted Metrics, Confidence, Evidence & Validations
-    st.markdown('<div class="fl-section-title">Step 3 · Inspect Extracted Metrics, Evidence & Validations</div>', unsafe_allow_html=True)
+    # Step 3: Inspect Extracted Metrics, Evidence & Validations
+    st.markdown('<div class="fl-section-title">Step 3 · Inspect Extracted Figures, Quotes & Validation Checks</div>', unsafe_allow_html=True)
+    render_analyst_glossary_strip(expanded=(bool(metrics) and not runs))
+
     tab_metrics, tab_vals, tab_spec = st.tabs(
         [
-            f"Extracted Metrics ({len(metrics or [])})",
-            f"Validation Checks ({len(validations or [])})",
-            "Approved 8-Metric Spec & Scoring Method",
+            f"Extracted Figures ({len(metrics or [])})",
+            f"Accounting Checks ({len(validations or [])})",
+            "8-Metric Audit Guide & Scoring Formula",
         ]
     )
 
@@ -966,16 +1031,18 @@ def render_filing_analysis_page() -> None:
         if metrics:
             extracted_cnt = sum(1 for m in metrics if m.get("extraction_status") == "EXTRACTED")
             auto_cnt = sum(1 for m in metrics if m.get("review_status") == "AUTO_APPROVED")
-            esc_cnt = sum(1 for m in metrics if m.get("review_status") == "REVIEW_REQUIRED")
+            pending_cnt = sum(1 for m in metrics if m.get("review_status") == "REVIEW_REQUIRED")
+            human_cnt = sum(1 for m in metrics if m.get("review_status") in ("APPROVED", "CORRECTED", "REJECTED"))
+            failed_cnt = sum(1 for m in metrics if m.get("validation_status") == "FAIL")
             render_metric_cards(
                 [
-                    {"label": "Extracted", "value": f"{extracted_cnt} / {len(metrics)}", "detail": "Non-missing metrics"},
-                    {"label": "Auto-Approved", "value": str(auto_cnt), "detail": "Met confidence + validations"},
-                    {"label": "Escalated", "value": str(esc_cnt), "detail": "Sent to Human Review"},
+                    {"label": "Figures Found", "value": f"{extracted_cnt} / {len(metrics)}", "detail": "Non-missing annual figures"},
+                    {"label": "Auto-Approved (Done)", "value": str(auto_cnt), "detail": "Passed ≥90% certainty & checks"},
+                    {"label": "Pending / Failed Checks", "value": f"{pending_cnt} / {failed_cnt}", "detail": "Waiting review / failed accounting rule"},
                     {
-                        "label": "Avg Confidence",
-                        "value": _format_confidence(sum(float(m.get("confidence_score") or 0.0) for m in metrics) / len(metrics)),
-                        "detail": f"Cutoff ≥ {settings.confidence.auto_approve_threshold:.0%}",
+                        "label": "Human Signed Off",
+                        "value": str(human_cnt),
+                        "detail": f"Avg certainty: {_format_confidence(sum(float(m.get('confidence_score') or 0.0) for m in metrics) / len(metrics))}",
                     },
                 ]
             )
@@ -1003,7 +1070,7 @@ def render_filing_analysis_page() -> None:
                 for m in metrics
             ]
             render_status_table(
-                headers=["Metric", "Normalized Value", "Unit & Scale", "Period", "Confidence", "Validation", "Governance"],
+                headers=["Financial Metric", "Standardized Value", "Unit & Scale", "Reporting Period", "Confidence", "Accounting Check", "Work Status"],
                 rows=rows,
                 right_align_cols={1, 4},
             )
@@ -1012,7 +1079,7 @@ def render_filing_analysis_page() -> None:
                 {
                     "Metric": m["metric_name"],
                     "Confidence (%)": round((m.get("confidence_score") or 0.0) * 100.0, 2),
-                    "Governance": humanize_status(m.get("review_status") or "NOT_REQUIRED"),
+                    "Work Status": humanize_status(m.get("review_status") or "NOT_REQUIRED"),
                 }
                 for m in metrics
             ]
@@ -1023,42 +1090,42 @@ def render_filing_analysis_page() -> None:
                     x="Confidence (%)",
                     y="Metric",
                     orientation="h",
-                    color="Governance",
+                    color="Work Status",
                     color_discrete_map={
-                        "Auto-Approved": "#059669",
-                        "Approved": "#1D4ED8",
-                        "Corrected": "#2563EB",
-                        "Needs Review": "#D97706",
-                        "Rejected": "#DC2626",
-                        "Not Required": "#64748B",
+                        "Auto-Approved": "#0E5A3E",
+                        "Analyst Approved": "#1E4B9A",
+                        "Analyst Corrected": "#3163BA",
+                        "Pending Review": "#854D0E",
+                        "Analyst Rejected": "#8B1D1D",
+                        "Not Required": "#596779",
                     },
                 )
                 fig_conf.add_vline(
                     x=settings.confidence.auto_approve_threshold * 100.0,
                     line_dash="dash",
-                    line_color="#0B1E36",
-                    annotation_text=f"Cutoff ({settings.confidence.auto_approve_threshold:.0%})",
+                    line_color="#0C1B2E",
+                    annotation_text=f"Auto-Approve Cutoff ({settings.confidence.auto_approve_threshold:.0%})",
                 )
                 fig_conf.update_xaxes(range=[0, 108])
                 render_plotly_chart(
                     fig_conf,
-                    title="Confidence Score vs. Approval Threshold",
+                    title="Certainty Score vs. 90% Auto-Approval Cutoff",
                     key=f"fa_conf_chart_{selected_accn or 'all'}",
                     height=310,
                 )
 
-            with st.expander("Source Evidence Snippets & 5-Factor Confidence Breakdown", expanded=False):
+            with st.expander("10-K Source Quotes (Evidence) & 5-Factor Confidence Breakdown", expanded=False):
                 for m in metrics:
                     conf_pct = _format_confidence(m.get("confidence_score"))
                     st.markdown(
                         f"**{m['metric_name']}** — {humanize_status(m.get('extraction_status'))} | "
-                        f"Concept: `us-gaap:{m.get('xbrl_concept') or 'None'}` | "
-                        f"Raw: `{m.get('raw_value') or '—'}` | Confidence: **{conf_pct}**"
+                        f"SEC Concept: `{m.get('xbrl_concept') or 'None'}` | "
+                        f"As Printed in Filing: `{m.get('raw_value') or '—'}` | Certainty: **{conf_pct}**"
                     )
                     st.markdown(
-                        f"<div class='fl-evidence-box'><strong>Location:</strong> {m.get('evidence_location') or '—'}<br>"
-                        f"<strong>Evidence:</strong> {m.get('source_evidence') or 'No verbatim snippet captured.'}<br>"
-                        f"<strong>Source:</strong> {m.get('source_url') or '—'}</div>",
+                        f"<div class='fl-evidence-box'><strong>Where Found:</strong> {m.get('evidence_location') or '—'}<br>"
+                        f"<strong>10-K Quote:</strong> {m.get('source_evidence') or 'No verbatim quote captured.'}<br>"
+                        f"<strong>Official SEC Link:</strong> {m.get('source_url') or '—'}</div>",
                         unsafe_allow_html=True,
                     )
                     raw_comp = m.get("confidence_components_json")
@@ -1078,7 +1145,7 @@ def render_filing_analysis_page() -> None:
                             ]
                             if f_rows:
                                 render_status_table(
-                                    headers=["Factor", "Weight", "Raw", "Weighted", "Status", "Rationale"],
+                                    headers=["Factor", "Weight", "Score", "Points", "Status", "Why"],
                                     rows=f_rows,
                                     right_align_cols={1, 2, 3},
                                 )
@@ -1089,21 +1156,21 @@ def render_filing_analysis_page() -> None:
                         try:
                             cands = json.loads(raw_cands)
                             if len(cands) > 1 or m.get("extraction_status") == "AMBIGUOUS":
-                                st.caption(f"Candidate facts recorded ({len(cands)}):")
+                                st.caption(f"Alternative figures found in filing ({len(cands)}):")
                                 for c in cands[:5]:
                                     st.code(
-                                        f"us-gaap:{c.get('concept')} | val={c.get('normalized_value')} {c.get('reported_unit')} "
-                                        f"| raw={c.get('raw_value')} (scale={c.get('scale_factor')}x) | {c.get('evidence_location')}",
+                                        f"{c.get('concept')} | standardized={c.get('normalized_value')} {c.get('reported_unit')} "
+                                        f"| printed={c.get('raw_value')} (scale={c.get('scale_factor')}x) | {c.get('evidence_location')}",
                                         language="text",
                                     )
                         except ValueError:
                             pass
         else:
             render_empty_state(
-                title="No extracted metrics for this filing yet",
-                description="FinovaLabs never invents placeholder metrics. Click 'Extract 8 Core Financial Metrics' in Step 2 to process this filing.",
+                title="No extracted figures for this filing yet",
+                description="FinovaLabs never invents placeholder metrics. Click 'Extract 8 Core Financial Metrics' in Step 2 to read this 10-K.",
                 badge_label="Awaiting Extraction",
-                next_step="Extracted numbers, units, periods, evidence snippets, and 5-factor scores will appear here.",
+                next_step="Standardized figures, units, reporting periods, 10-K quotes, and certainty ratings will appear here.",
             )
 
     with tab_vals:
@@ -1126,24 +1193,24 @@ def render_filing_analysis_page() -> None:
                     ]
                 )
             render_status_table(
-                headers=["Rule", "Scope / Metric", "Status", "Variance %", "Explanation"],
+                headers=["Accounting Rule", "Line Item / Scope", "Result", "Difference %", "Plain-English Explanation"],
                 rows=val_rows,
                 right_align_cols={3},
             )
-            with st.expander("Validation Input References & Tolerances", expanded=False):
+            with st.expander("Check Inputs & Allowed Tolerances", expanded=False):
                 for v in validations:
                     st.markdown(
-                        f"**{v['rule_name']} — {v['metric_name']}** (`{v['status']}`) • "
-                        f"Tolerance: `{v.get('tolerance_used') or '—'}` • Escalated: `{bool(v.get('escalated'))}`"
+                        f"**{v['rule_name'].replace('_', ' ').title()} — {v['metric_name']}** (`{humanize_status(v['status'])}`) • "
+                        f"Allowed Tolerance: `{v.get('tolerance_used') or '—'}` • Sent to Review: `{'Yes' if v.get('escalated') else 'No'}`"
                     )
                     if v.get("input_metric_refs_json"):
                         st.code(v["input_metric_refs_json"], language="json")
         else:
             render_empty_state(
-                title="No financial validation checks run yet",
-                description="Extract metrics for the selected filing in Step 2 to evaluate the accounting equation, segment reconciliation, and YoY checks.",
-                badge_label="No Validations",
-                next_step="Outputs cleanly distinguish Pass, Warning, Fail, and Not Applicable.",
+                title="No accounting checks run yet",
+                description="Extract figures in Step 2 to run the Balance Sheet equation, Segment total check, and Year-over-Year swing checks.",
+                badge_label="Pending Extraction",
+                next_step="Checks clearly separate Passed, Alert / Review, Failed Check, and Not Applicable.",
             )
 
     with tab_spec:
@@ -1155,17 +1222,17 @@ def render_filing_analysis_page() -> None:
                 spec.expected_unit,
                 spec.sign_convention.title(),
                 ", ".join(spec.xbrl_concepts[:2]) + ("…" if len(spec.xbrl_concepts) > 2 else ""),
-                ("Mapped", "success"),
+                ("Supported", "success"),
             ]
             for spec in approved_specs
         ]
         render_status_table(
-            headers=["Metric", "Period Type", "Unit", "Sign Convention", "Primary US-GAAP Concepts", "Status"],
+            headers=["Financial Metric", "Period Type", "Standard Unit", "Sign Rule", "Standard SEC Tags", "Coverage"],
             rows=spec_rows,
         )
         st.caption(
-            f"Active Confidence Engine v{settings.confidence.scoring_version} • "
-            f"Threshold: ≥ {settings.confidence.auto_approve_threshold:.0%}"
+            f"Scoring Policy v{settings.confidence.scoring_version} • "
+            f"Auto-Approval Threshold: ≥ {settings.confidence.auto_approve_threshold:.0%}"
         )
         st.code(SCORING_METHOD_DOC, language="text")
 
@@ -1173,8 +1240,8 @@ def render_filing_analysis_page() -> None:
 
 
 def render_human_review_page() -> None:
-    """Render the Human Review queue backed by SQLite review_tasks."""
-    settings, summary = _bootstrap_page("Human Review", active_step=3)
+    """Render the plain-English Human Review queue backed by saved escalation tasks."""
+    settings, summary = _bootstrap_page("Resolve Human Reviews", active_step=3)
     if settings is None:
         render_footer()
         return
@@ -1183,11 +1250,12 @@ def render_human_review_page() -> None:
     open_tasks = [t for t in all_tasks if t["status"] == "OPEN"]
     open_count = len(open_tasks)
     resolved_count = len(all_tasks) - open_count
+    failed_checks_count = int((summary or {}).get("failed_validations") or 0)
 
     render_page_header(
-        title="Human Review",
-        subtitle="Inspect escalated metrics side-by-side with source evidence, record justified approve/correct/reject decisions, and resume paused workflows.",
-        status_label=f"{open_count} Pending Review(s)" if open_count else "Queue Clear",
+        title="Resolve Human Reviews",
+        subtitle="Check flagged financial figures side-by-side with exact 10-K quotes, then Approve, Correct, or Reject each pending item.",
+        status_label=f"{open_count} Pending Review(s)" if open_count else "All Reviews Resolved",
         status_tone="warning" if open_count else "success",
     )
     _render_stepper_from_summary(5, summary)
@@ -1195,11 +1263,11 @@ def render_human_review_page() -> None:
     render_guided_tour_panel("human-review")
 
     if open_count > 0:
-        hr_next = f"Expand Pending Task #1 below, verify the extracted figure against its 10-K citation, and click Approve, Correct Value, or Reject."
-        hr_expect = "SQLite commits your justification, session ID, and SHA-256 audit event atomically while preserving the original figure, then resumes unblocked checkpoints."
+        hr_next = "Open Pending Item #1 below, compare the extracted figure against the 10-K quote on the left, and choose Approve, Correct Value, or Reject."
+        hr_expect = "Your signed-off figure and note are permanently saved alongside the original number, unblocking the final SEC report."
     else:
-        hr_next = "No pending escalations remain. Click 'Continue to Accuracy Report ->' or inspect resolved history / append-only amendments below."
-        hr_expect = "Accuracy Report compares your pre-review raw values vs. final post-review decisions against official SEC Company Facts."
+        hr_next = "Zero pending reviews remain. Click the highlighted button below to generate your Final SEC Report."
+        hr_expect = "Compares both initial figures and your signed-off decisions directly against official SEC filings."
 
     hr_g1, hr_g2 = st.columns([3.4, 1.0])
     with hr_g1:
@@ -1207,14 +1275,16 @@ def render_human_review_page() -> None:
     with hr_g2:
         render_field_tooltips_popover()
 
+    render_analyst_glossary_strip(expanded=False)
+
     conf = settings.confidence
     val = settings.validation
     render_metric_cards(
         [
-            {"label": "Pending Escalations", "value": str(open_count), "detail": "Shown first below for analyst action"},
-            {"label": "Resolved Decisions", "value": str(resolved_count), "detail": "Committed permanently to SQLite"},
-            {"label": "Auto-Approve Cutoff", "value": f"≥ {conf.auto_approve_threshold:.0%}", "detail": "Plus mandatory validation pass"},
-            {"label": "YoY Alert Threshold", "value": f"±{val.yoy_change_alert_threshold:.0%}", "detail": f"Segment tolerance ±{val.segment_reconciliation_tolerance:.1%}"},
+            {"label": "Pending Analyst Action", "value": str(open_count), "detail": "Prioritized at top of queue below"},
+            {"label": "Signed Off (Human Decisions)", "value": str(resolved_count), "detail": "Saved with original figure intact"},
+            {"label": "Failed Accounting Checks", "value": str(failed_checks_count), "detail": f"Auto-approve requires pass & ≥ {conf.auto_approve_threshold:.0%} certainty"},
+            {"label": "Year-over-Year Alert", "value": f"±{val.yoy_change_alert_threshold:.0%}", "detail": f"Segment tolerance ±{val.segment_reconciliation_tolerance:.1%}"},
         ]
     )
 
@@ -1226,22 +1296,22 @@ def render_human_review_page() -> None:
     ]
 
     if open_count == 0 and not resumable_runs:
-        n1, n2 = st.columns([3, 1])
+        n1, n2 = st.columns([3, 1.2])
         with n1:
             if all_tasks:
-                st.success("**All escalations resolved:** Every pending human review task has a committed decision.")
+                st.success("**All Pending Items Resolved:** Every flagged financial figure now has a saved analyst decision.")
             else:
-                st.info("**Review queue is empty:** No pending escalations require action right now.")
+                st.info("**Review Queue Clear:** No flagged items are waiting for analyst sign-off right now.")
         with n2:
             if (summary or {}).get("total_runs", 0) > 0:
-                navigate_button("Continue to Accuracy Report →", "accuracy-report", key="hr_next_acc", primary=True)
+                navigate_button("Obtain Final SEC Report ->", "accuracy-report", key="hr_next_acc", primary=True)
             else:
-                navigate_button("Start Audit in Filing Analysis →", "filing-analysis", key="hr_next_fa", primary=True)
+                navigate_button("Select Company & 10-K ->", "filing-analysis", key="hr_next_fa", primary=True)
 
     status_filter = st.selectbox(
-        "Filter Review View by Status",
+        "Filter Review Queue by Decision Status",
         ["ALL", "OPEN", "APPROVED", "CORRECTED", "REJECTED"],
-        help="Filters pending escalation cards and the review history table together.",
+        help="Show all items, only Pending Review (OPEN), or completed Human Decisions.",
     )
     filtered = (
         all_tasks
@@ -1252,7 +1322,7 @@ def render_human_review_page() -> None:
     # Pending items always shown FIRST when filter permits
     if status_filter in {"ALL", "OPEN"}:
         if open_tasks:
-            st.markdown('<div class="fl-section-title">Pending Escalations (Action Required)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="fl-section-title">Pending Work · Escalated Items Awaiting Sign-Off</div>', unsafe_allow_html=True)
             for idx, t in enumerate(open_tasks):
                 unit_label = t.get("unit") or "USD"
                 currency_label = t.get("currency") or "USD"
@@ -1267,66 +1337,66 @@ def render_human_review_page() -> None:
                 )
                 period_display = (
                     f"{t.get('fiscal_period') or 'FY'} {t.get('fiscal_year') or '—'} | "
-                    f"{t.get('period_start') or 'Instant'} → {t.get('period_end') or '—'}"
+                    f"{t.get('period_start') or 'Year-End Balance'} → {t.get('period_end') or '—'}"
                 )
                 header = (
                     f"[PENDING #{idx + 1}] {company_display} • {t.get('metric_name') or '—'} • "
                     f"Extracted: {orig_display} • Confidence: {_format_confidence(t.get('confidence_score'))}"
                 )
                 with st.expander(header, expanded=(idx == 0)):
-                    st.warning(f"**Why Review Is Required:** {t['reason']}")
+                    st.warning(f"**Why Flagged for Analyst Review:** {t['reason']}")
                     col_evidence, col_decision = st.columns([1.15, 1.0])
 
                     with col_evidence:
-                        st.markdown("**Extracted Figure & Filing Evidence**")
+                        st.markdown("**Extracted Figure & 10-K Filing Evidence**")
                         st.markdown(
                             f"**Company:** {company_display}  \n"
                             f"**Metric:** {t.get('metric_name') or '—'}  \n"
-                            f"**Original Extracted Value:** `{orig_display}` (raw: `{t.get('raw_value') or '—'}`)  \n"
-                            f"**<abbr class='fl-tip' title='{TOOLTIP_PERIOD}'>Period</abbr>:** `{period_display}` | "
+                            f"**Original Extracted Value:** `{orig_display}` (as printed: `{t.get('raw_value') or '—'}`)  \n"
+                            f"**<abbr class='fl-tip' title='{TOOLTIP_PERIOD}'>Reporting Period</abbr>:** `{period_display}` | "
                             f"**<abbr class='fl-tip' title='{TOOLTIP_UNIT}'>Unit</abbr>:** `{unit_label} ({currency_label})`  \n"
                             f"**<abbr class='fl-tip' title='{TOOLTIP_CONFIDENCE}'>Confidence</abbr>:** `{_format_confidence(t.get('confidence_score'))}` "
-                            f"(Threshold `{_format_confidence(t.get('confidence_threshold'))}`) | "
-                            f"**<abbr class='fl-tip' title='{TOOLTIP_VALIDATION}'>Validation</abbr>:** `{humanize_status(t.get('validation_status') or 'PENDING')}`  \n"
-                            f"**Source Filing:** `{t.get('form_type') or '10-K'}` `{t.get('accession_number') or '—'}` "
+                            f"(Auto-approve ≥ `{_format_confidence(t.get('confidence_threshold'))}`) | "
+                            f"**<abbr class='fl-tip' title='{TOOLTIP_VALIDATION}'>Accounting Check</abbr>:** `{humanize_status(t.get('validation_status') or 'PENDING')}`  \n"
+                            f"**Source Filing:** `Form {t.get('form_type') or '10-K'}` `{t.get('accession_number') or '—'}` "
                             f"(Filed `{t.get('filing_date') or '—'}`)  \n"
-                            f"**Source URL:** {t.get('source_url') or '—'}",
+                            f"**Official SEC URL:** {t.get('source_url') or '—'}",
                             unsafe_allow_html=True,
                         )
                         st.markdown(
-                            f"<div class='fl-evidence-box'><strong><abbr class='fl-tip' title='{TOOLTIP_EVIDENCE}'>Citation</abbr> ({t.get('evidence_location') or 'No HTML location'}):</strong><br>"
-                            f"{t.get('source_evidence') or 'No verbatim filing snippet captured for this metric.'}</div>",
+                            f"<div class='fl-evidence-box'><strong><abbr class='fl-tip' title='{TOOLTIP_EVIDENCE}'>10-K Quote</abbr> ({t.get('evidence_location') or 'Location not recorded'}):</strong><br>"
+                            f"{t.get('source_evidence') or 'No verbatim quote captured for this figure in the filing.'}</div>",
                             unsafe_allow_html=True,
                         )
 
                     with col_decision:
-                        st.markdown("**Analyst Decision & Audit Justification**")
+                        st.markdown("**Analyst Sign-Off & Explanation**")
                         default_corr = (
                             str(t["normalized_decimal"])
                             if t.get("normalized_decimal") is not None
                             else (str(t["normalized_value"]) if t.get("normalized_value") is not None else "")
                         )
                         corr_input = st.text_input(
-                            "Corrected Value (used only when clicking 'Correct Value')",
+                            "Corrected Value (used only if clicking 'Correct Value')",
                             value=default_corr,
                             key=f"corr_{t['task_id']}",
-                            help="Enter the normalized numeric value in the reported unit. Original extracted value stays preserved permanently.",
+                            help=f"Enter the full standardized figure in {unit_label}. The original extracted number stays preserved for audit history.",
                         )
                         if default_corr and corr_input.strip() and corr_input.strip() != default_corr:
-                            st.caption(f"Proposed change preview: `{default_corr}` -> `{corr_input.strip()}` ({unit_label})")
+                            st.caption(f"Proposed change: `{default_corr}` -> `{corr_input.strip()}` ({unit_label})")
                         reviewer_input = st.text_input(
-                            "Reviewer Identifier",
+                            "Analyst Name / Initials",
                             value="analyst",
                             key=f"rev_{t['task_id']}",
-                            help="Recorded alongside your browser session ID in the append-only SHA-256 audit ledger.",
+                            help="Recorded alongside your browser session in the permanent decision log.",
                         )
                         note_input = st.text_area(
-                            "Explanation / Audit Justification (required for Correct Value & Reject)",
-                            placeholder="State how you verified this figure against the 10-K statement or why you are rejecting it...",
+                            "Review Note / Reason (required when correcting or rejecting)",
+                            placeholder="Explain how you verified this number in the 10-K report or why it should be rejected...",
                             key=f"note_{t['task_id']}",
                         )
                         st.caption(
-                            "Consequential action: submitting commits your decision and SHA-256 audit event atomically before resuming the workflow."
+                            "Submitting saves your decision permanently before advancing the audit."
                         )
 
                         act_clicked: str | None = None
@@ -1335,8 +1405,8 @@ def render_human_review_page() -> None:
                             if st.button(
                                 "Approve",
                                 key=f"btn_approve_{t['task_id']}",
-                                type="primary",
-                                help="Accept original extracted value as audited.",
+                                type="primary" if idx == 0 else "secondary",
+                                help="Accept the original extracted value as verified.",
                                 **stretch_width_kwargs(st.button),
                             ):
                                 act_clicked = "APPROVE"
@@ -1344,7 +1414,7 @@ def render_human_review_page() -> None:
                             if st.button(
                                 "Correct Value",
                                 key=f"btn_correct_{t['task_id']}",
-                                help="Save the corrected numeric value above (requires explanation).",
+                                help="Replace with the corrected value entered above (requires a short review note).",
                                 **stretch_width_kwargs(st.button),
                             ):
                                 act_clicked = "EDIT"
@@ -1352,7 +1422,7 @@ def render_human_review_page() -> None:
                             if st.button(
                                 "Reject",
                                 key=f"btn_reject_{t['task_id']}",
-                                help="Reject unusable/unverified metric (requires explanation).",
+                                help="Mark this figure as unverified / unusable (requires a short review note).",
                                 **stretch_width_kwargs(st.button),
                             ):
                                 act_clicked = "REJECT"
@@ -1367,11 +1437,11 @@ def render_human_review_page() -> None:
                                 if latest_state and latest_state[0]["status"] != "OPEN":
                                     flash_feedback(
                                         "warning",
-                                        f"Task `{t['task_id']}` was already resolved as `{humanize_status(latest_state[0]['status'])}` — duplicate submission prevented.",
+                                        f"Task `{t['task_id']}` was already signed off as `{humanize_status(latest_state[0]['status'])}` — duplicate submission prevented.",
                                     )
                                     st.rerun()
 
-                                with st.spinner("Committing decision to SQLite & resuming workflow..."):
+                                with st.spinner("Saving your review decision and updating audit progress..."):
                                     res = submit_review_decision(
                                         task_id=t["task_id"],
                                         action=act_clicked,
@@ -1386,52 +1456,51 @@ def render_human_review_page() -> None:
                                 if wf_out:
                                     flash_feedback(
                                         "success",
-                                        f"Decision saved (`{humanize_status(res['decision']['status'])}`). Workflow `{wf_out['run_id']}` resumed -> `{humanize_status(wf_out['status'])}`. Next: open Accuracy Report to benchmark vs. SEC Facts.",
+                                        f"Decision saved (`{humanize_status(res['decision']['status'])}`). Audit `{wf_out['run_id']}` finished -> `{humanize_status(wf_out['status'])}`. Next: open '4. Final SEC Report'.",
                                     )
                                 else:
                                     flash_feedback(
                                         "success",
-                                        f"Decision saved (`{humanize_status(res['decision']['status'])}`). {res['remaining_open_for_run']} open task(s) remain in run.",
+                                        f"Decision saved (`{humanize_status(res['decision']['status'])}`). {res['remaining_open_for_run']} pending item(s) remain in this audit.",
                                     )
                                 st.rerun()
                             except Exception as exc:
                                 render_error_banner(
-                                    "Review decision could not be recorded",
+                                    "Review decision could not be saved",
                                     str(exc),
-                                    hint="Enter an explanation for Correct Value / Reject and a valid numeric figure if editing.",
+                                    hint="Please enter a review note when clicking Correct Value or Reject, and make sure any edited figure is numeric.",
                                 )
         elif all_tasks and status_filter == "OPEN":
             render_empty_state(
-                title="No pending review tasks remain",
-                description="All escalated items in SQLite have already been approved, corrected, or rejected.",
+                title="No pending reviews remain",
+                description="All flagged figures have already been approved, corrected, or rejected by an analyst.",
                 badge_label="Queue Clear",
-                next_step="Switch the filter to ALL to inspect completed review decisions or proceed to Accuracy Report.",
+                next_step="Switch the filter to ALL to inspect signed-off decisions, or go to '4. Final SEC Report'.",
             )
 
     if resumable_runs:
-        st.warning(f"**Ready to Resume ({len(resumable_runs)}):** Saved workflow checkpoint(s) have zero remaining open tasks.")
+        st.warning(f"**Ready to Finalize ({len(resumable_runs)}):** All flagged items for this saved audit have been signed off.")
         for r in resumable_runs:
             if st.button(
                 f"Resume Workflow {r['run_id']} ({humanize_status(r['status'])} @ {r.get('current_stage') or '—'})",
                 key=f"resume_{r['run_id']}",
-                type="primary",
+                type="primary" if open_count == 0 else "secondary",
             ):
-                with st.spinner(f"Resuming checkpointed workflow {r['run_id']}..."):
+                with st.spinner(f"Finalizing saved audit {r['run_id']}..."):
                     outcome = safe_execute(lambda rid=r["run_id"]: resume_audit_workflow(rid), "workflow resume")
                 if outcome is not None:
                     flash_feedback(
                         "success",
-                        f"Workflow `{outcome.run_id}` resumed -> `{humanize_status(outcome.status)}`.",
+                        f"Audit `{outcome.run_id}` finished -> `{humanize_status(outcome.status)}`.",
                     )
                     st.rerun()
 
     all_metrics = safe_execute(lambda: fetch_extracted_metrics(limit=200), "amendable metrics query") or []
     amendable_metrics = [m for m in all_metrics if m.get("review_status") != "REVIEW_REQUIRED"]
     if amendable_metrics:
-        with st.expander("Submit Subsequent Correction (Append-Only Audit Amendment)", expanded=False):
+        with st.expander("Add Subsequent Amendment to an Already-Approved Figure (Optional)", expanded=False):
             st.caption(
-                "Appends a new audit record and updated reviewed value to an already-approved or auto-approved metric. "
-                "Previous audit records and the original extracted value are never overwritten."
+                "Adds a new follow-up correction entry without ever erasing earlier approvals or the original extracted figure."
             )
             metric_options = {
                 m["id"]: (
@@ -1441,7 +1510,7 @@ def render_human_review_page() -> None:
                 for m in amendable_metrics
             }
             sel_amend_id = st.selectbox(
-                "Select Metric to Amend",
+                "Choose Metric to Amend",
                 options=list(metric_options.keys()),
                 format_func=lambda mid: metric_options.get(mid, str(mid)),
                 key="hr_amend_metric_id",
@@ -1451,9 +1520,9 @@ def render_human_review_page() -> None:
             orig_m_disp = _format_decimal_metric(sel_m.get("normalized_decimal"), sel_m.get("normalized_value"), m_unit)
             curr_m_disp = _format_decimal_metric(sel_m.get("reviewed_decimal"), sel_m.get("reviewed_value"), m_unit)
             st.markdown(
-                f"**Permanent Original Value:** `{orig_m_disp}` | "
-                f"**Current Reviewed Value:** `{curr_m_disp}` | "
-                f"**Workflow Run:** `{sel_m.get('run_id') or 'Standalone'}`"
+                f"**Original Extracted Value:** `{orig_m_disp}` | "
+                f"**Current Final Value:** `{curr_m_disp}` | "
+                f"**Audit ID:** `{sel_m.get('run_id') or 'Standalone'}`"
             )
             ac1, ac2, ac3 = st.columns([1, 2, 1])
             with ac1:
@@ -1465,15 +1534,15 @@ def render_human_review_page() -> None:
                     key="hr_amend_val",
                 )
             with ac3:
-                amend_reviewer = st.text_input("Reviewer ID", value="analyst", key="hr_amend_reviewer")
+                amend_reviewer = st.text_input("Analyst Name", value="analyst", key="hr_amend_reviewer")
             amend_note = st.text_area(
-                "Amendment Explanation (required for EDIT / REJECT)",
-                placeholder="Explain the reason for this subsequent audit amendment...",
+                "Amendment Reason (required for EDIT / REJECT)",
+                placeholder="Explain why you are updating this previously reviewed figure...",
                 key="hr_amend_note",
             )
-            if st.button("Record Append-Only Amendment", key="btn_record_amendment", type="primary"):
+            if st.button("Record Append-Only Amendment", key="btn_record_amendment", type="secondary"):
                 try:
-                    with st.spinner("Appending audit amendment to SQLite..."):
+                    with st.spinner("Saving follow-up decision entry..."):
                         amend_res = submit_subsequent_review_correction(
                             metric_id=sel_amend_id,
                             action=amend_action,
@@ -1485,13 +1554,13 @@ def render_human_review_page() -> None:
                     flash_feedback(
                         "success",
                         f"Appended audit record #{amend_res['decision'].get('audit_event_id')} "
-                        f"(`{humanize_status(amend_res['decision']['status'])}`). Earlier history preserved untouched.",
+                        f"(`{humanize_status(amend_res['decision']['status'])}`). Earlier history kept intact.",
                     )
                     st.rerun()
                 except Exception as exc:
-                    render_error_banner("Amendment could not be recorded", str(exc))
+                    render_error_banner("Amendment could not be saved", str(exc))
 
-    st.markdown('<div class="fl-section-title">Review Queue History</div>', unsafe_allow_html=True)
+    st.markdown('<div class="fl-section-title">All Review Items & Human Decisions</div>', unsafe_allow_html=True)
     if filtered:
         rows = [
             [
@@ -1514,16 +1583,16 @@ def render_human_review_page() -> None:
             for t in filtered
         ]
         render_status_table(
-            headers=["Company / Filing", "Metric", "Original Value", "Reviewed Value", "Confidence", "Escalation Reason", "Status"],
+            headers=["Company / Filing", "Metric", "Original Value", "Final Value", "Confidence", "Reason Flagged", "Decision Status"],
             rows=rows,
             right_align_cols={2, 3, 4},
         )
     else:
         render_empty_state(
-            title="No review tasks match the selected status filter",
-            description="Metrics flagged by low confidence (<90%) or failed financial validation rules appear here for review.",
+            title="No review items match the selected filter",
+            description="Figures flagged by low certainty (<90%) or failed accounting checks appear here for analyst review.",
             badge_label="Queue Clear",
-            next_step="Run an audit in Filing Analysis or set the filter above to ALL.",
+            next_step="Run a filing audit in '2. Select Company & 10-K' or change the filter above to ALL.",
         )
 
     render_footer()
@@ -1552,8 +1621,8 @@ def _format_pct_diff(raw_pct: Any) -> str:
 
 
 def render_accuracy_report_page() -> None:
-    """Render the Accuracy Report page for SEC Company Facts benchmarking and exports."""
-    settings, posture_summary = _bootstrap_page("Accuracy Report", active_step=4)
+    """Render the plain-English Final SEC Report page for accuracy benchmarking & downloads."""
+    settings, posture_summary = _bootstrap_page("Final SEC Report", active_step=4)
     if settings is None:
         render_footer()
         return
@@ -1566,12 +1635,12 @@ def render_accuracy_report_page() -> None:
     _ = build_report_metadata(report_type="company_facts_accuracy")
 
     render_page_header(
-        title="Accuracy Report",
+        title="Final SEC Report",
         subtitle=(
-            "Compare raw automated extraction and final human-reviewed figures against "
-            "official SEC Company Facts XBRL entries with strict matching rules."
+            "Check both the initially extracted numbers and final analyst-reviewed values against official SEC "
+            "financial reports, then download CSV or JSON reports."
         ),
-        status_label=f"{len(all_evaluations)} Benchmarked" if all_evaluations else "Awaiting Benchmark",
+        status_label=f"{len(all_evaluations)} Figures Verified" if all_evaluations else "Ready to Verify",
         status_tone="success" if all_evaluations else "neutral",
     )
     _render_stepper_from_summary(6, posture_summary)
@@ -1579,14 +1648,14 @@ def render_accuracy_report_page() -> None:
     render_guided_tour_panel("accuracy-report")
 
     if not all_runs:
-        acc_next = "Click 'Start Audit in Filing Analysis ->' to retrieve a Form 10-K and run metric extraction first."
-        acc_expect = "Once at least one workflow run exists, you can benchmark every metric against official SEC Company Facts XBRL entries."
+        acc_next = "Click 'Select Company & 10-K ->' below to retrieve a Form 10-K and extract figures first."
+        acc_expect = "Once a company audit has been run, you can verify every figure against official SEC filings and export your final report."
     elif not all_evaluations:
-        acc_next = "Select an audit run below (or 'All Audit Runs') and click 'Evaluate vs. SEC Facts'."
-        acc_expect = "FinovaLabs checks exact company CIK, US-GAAP tag, FY annual period, and unit compatibility, showing Pre-Review vs. Post-Review accuracy."
+        acc_next = "Choose an audit below (or 'All Audit Runs') and click 'Evaluate vs. SEC Facts'."
+        acc_expect = "Shows Before-Review vs. After-Review accuracy, transparent coverage totals, interactive charts, and CSV/JSON report downloads."
     else:
-        acc_next = "Review the Pre vs. Post accuracy charts and breakdown tables below, export CSV/JSON if needed, or inspect the Audit Trail."
-        acc_expect = "Verifies whether human corrections closed extraction gaps without hiding raw automated error rates."
+        acc_next = "Download your Final CSV / JSON Reports below or click 'Inspect Decision History ->' to verify the full approval record."
+        acc_expect = "Downloadable executive files plus complete traceability across every analyst approval, edit, and rejection."
 
     acc_g1, acc_g2 = st.columns([3.4, 1.0])
     with acc_g1:
@@ -1594,28 +1663,30 @@ def render_accuracy_report_page() -> None:
     with acc_g2:
         render_field_tooltips_popover()
 
+    render_analyst_glossary_strip(expanded=False)
+
     if not all_runs:
         render_info_card(
-            title="Primary Next Action: Run a Filing Audit First",
+            title="Primary Next Action: Run a Company Audit First",
             body=(
-                "No audit runs exist in SQLite yet. Retrieve a 10-K filing and extract metrics in "
-                "Filing Analysis before benchmarking against SEC Company Facts."
+                "No company audits have been started yet. Pick a company and extract figures in "
+                "'2. Select Company & 10-K' before running the Final SEC Report."
             ),
             badge_label="Step 1 Required",
             badge_tone="info",
         )
         navigate_button(
-            "Start Audit in Filing Analysis ->",
+            "Select Company & 10-K ->",
             "filing-analysis",
             key="acc_go_fa_empty",
             primary=True,
         )
     else:
         with st.container(border=True):
-            st.markdown("**1. Benchmark Extracted Runs Against SEC Company Facts**")
+            st.markdown("**1. Verify Audited Figures Against Official SEC Reports**")
             st.caption(
-                "Matches each extracted metric strictly by company CIK, US-GAAP concept, annual FY period, and unit. "
-                "Pre-review and post-review accuracy are calculated separately."
+                "Compares each figure strictly by Company, Line-Item Meaning, Annual Fiscal Year Period, and Unit. "
+                "Accuracy Before Human Review and After Human Review are reported separately."
             )
             run_labels = {
                 r["run_id"]: f"{r.get('ticker') or r['cik']} • {r.get('accession_number') or r['run_id']} ({humanize_status(r['status'])})"
@@ -1625,23 +1696,23 @@ def render_accuracy_report_page() -> None:
             c1, c2, c3 = st.columns([3, 1.2, 1.4])
             with c1:
                 eval_target = st.selectbox(
-                    "Audit run to benchmark",
+                    "Choose company audit to verify",
                     options=["ALL_RUNS", *run_labels.keys()],
                     format_func=lambda k: "All Audit Runs" if k == "ALL_RUNS" else run_labels.get(k, k),
                     key="acc_eval_target",
-                    help="Select one workflow run or benchmark every recorded run in SQLite.",
+                    help="Verify one completed filing audit or every audit in your workspace.",
                 )
             with c2:
                 force_refresh_cf = st.checkbox(
-                    "Force SEC refresh",
+                    "Refresh SEC reference",
                     value=False,
                     key="acc_force_refresh",
-                    help="Bypass the cached Company Facts JSON and query live SEC EDGAR APIs.",
+                    help="Pull a fresh copy of the official SEC Company Facts database instead of using the saved local copy.",
                 )
             with c3:
                 run_eval_clicked = st.button(
                     "Evaluate vs. SEC Facts",
-                    type="primary",
+                    type="primary" if not all_evaluations else "secondary",
                     **stretch_width_kwargs(st.button),
                 )
 
@@ -1652,14 +1723,13 @@ def render_accuracy_report_page() -> None:
             )
             if target_will_overwrite:
                 st.caption(
-                    "Re-evaluating overwrites stored Company Facts comparison snapshots for matching run(s) "
-                    "while preserving your human review decisions and append-only audit trail."
+                    "Re-checking refreshes the comparison snapshot for those audits while keeping your human decisions and audit trail intact."
                 )
 
             if run_eval_clicked:
                 target_ids = list(run_labels.keys()) if eval_target == "ALL_RUNS" else [eval_target]
                 ok_count = 0
-                with st.spinner("Comparing extracted metrics against SEC Company Facts..."):
+                with st.spinner("Comparing extracted and signed-off figures against official SEC data..."):
                     for rid in target_ids:
                         res = safe_execute(
                             lambda target_rid=rid: evaluate_run_against_company_facts(
@@ -1674,13 +1744,13 @@ def render_accuracy_report_page() -> None:
                 if ok_count:
                     flash_feedback(
                         "success",
-                        f"Evaluated {ok_count} audit run(s) against SEC Company Facts and saved results to SQLite.",
+                        f"Evaluated {ok_count} audit run(s) against SEC Company Facts and updated your Final Report.",
                     )
                     st.rerun()
                 else:
                     render_error_banner(
-                        "SEC Company Facts evaluation failed",
-                        "No selected audit runs could be evaluated. Check connectivity or SEC User-Agent settings.",
+                        "SEC comparison failed",
+                        "No selected audits could be verified. Check internet connectivity or SEC Contact Email settings.",
                     )
 
     # Company & run filters
@@ -1691,7 +1761,7 @@ def render_accuracy_report_page() -> None:
         with f1:
             sel_company = st.selectbox("Filter by Company", ["ALL", *company_opts], key="acc_filter_company")
         with f2:
-            sel_run = st.selectbox("Filter by Run ID", ["ALL", *run_opts], key="acc_filter_run")
+            sel_run = st.selectbox("Filter by Audit ID", ["ALL", *run_opts], key="acc_filter_run")
         evaluations = [
             e for e in all_evaluations
             if (sel_company == "ALL" or (e.get("ticker") or e.get("cik") or "UNKNOWN") == sel_company)
@@ -1721,30 +1791,30 @@ def render_accuracy_report_page() -> None:
     render_metric_cards(
         [
             {
-                "label": "Pre-Review Raw Accuracy",
+                "label": "Before Human Review",
                 "value": pre_acc_display,
-                "detail": summary.pre_denominator_label if summary.total_records else "No records yet",
+                "detail": summary.pre_denominator_label if summary.total_records else "Initial automated match rate",
             },
             {
-                "label": "Post-Review Accuracy",
+                "label": "After Human Review (Final)",
                 "value": post_acc_display,
                 "detail": (
-                    f"{summary.post_denominator_label} • +{summary.human_corrected_matches} human-fixed"
+                    f"{summary.post_denominator_label} • +{summary.human_corrected_matches} fixed by analyst"
                     if summary.total_records
-                    else "Human corrections tracked separately"
+                    else "Final verified match rate"
                 ),
             },
             {
-                "label": "SEC Ground-Truth Coverage",
+                "label": "SEC Reference Coverage",
                 "value": gt_cov_display,
-                "detail": summary.coverage_denominator_label if summary.total_records else "Awaiting evaluations",
+                "detail": summary.coverage_denominator_label if summary.total_records else "Figures with SEC benchmark",
             },
             {
-                "label": "Mismatches & Unverified",
+                "label": "Failed Matches & Missing Refs",
                 "value": str(non_match_total),
                 "detail": (
                     f"Mismatch: {summary.pre_mismatches} | Unmatched: {summary.unmatched_record_count} | "
-                    f"No GT: {summary.unavailable_reference_count}"
+                    f"No SEC Ref: {summary.unavailable_reference_count}"
                 ),
             },
         ]
@@ -1754,34 +1824,33 @@ def render_accuracy_report_page() -> None:
         act_c1, act_c2, _ = st.columns([1.4, 1.4, 2])
         with act_c1:
             navigate_button(
-                "Inspect Audit Trail ->",
+                "Inspect Decision History ->",
                 "audit-trail",
                 key="acc_go_audit",
                 primary=True,
-                help_text="Review the tamper-evident append-only decision ledger for these runs.",
+                help_text="Review every analyst approval, edit, and reason in chronological order.",
             )
         with act_c2:
             navigate_button(
-                "Open Human Review",
+                "Back to Human Reviews",
                 "human-review",
                 key="acc_go_hr",
                 primary=False,
-                help_text="Resolve open escalations or submit append-only corrections.",
+                help_text="Open pending sign-offs or submit a follow-up correction.",
             )
 
-        with st.expander("Matching Rules, Denominators & Ground-Truth Coverage Explained", expanded=True):
+        with st.expander("How Accuracy & SEC Coverage Are Calculated (Plain-English Rules)", expanded=True):
             st.markdown(
-                f"- **Reference Source & Matching Rules:** Each extracted metric is matched against the official "
-                f"SEC EDGAR Company Facts JSON on exact **company CIK**, **US-GAAP XBRL concept**, **annual (`FY`) fiscal period**, "
-                f"and **compatible unit**. Period mismatches (`{summary.period_mismatch_count}`), unit mismatches "
-                f"(`{summary.unit_mismatch_count}`), and missing ground-truth facts (`{summary.unavailable_reference_count}`) "
+                f"- **Matching Rules:** Every audited figure is matched strictly against official SEC financial "
+                f"data on **Company**, **Accounting Concept**, **Annual (`FY`) Reporting Period**, and **Unit**. "
+                f"Period mismatches (`{summary.period_mismatch_count}`), unit mismatches (`{summary.unit_mismatch_count}`), "
+                f"and items the company omitted from SEC reference tags (`{summary.unavailable_reference_count}`) "
                 f"**never count as matches**.\n"
-                f"- **Pre-Review Raw Accuracy (`{pre_acc_display}`):** Evaluates automated extraction before human edits "
-                f"(`{summary.pre_denominator_label}`, overall conservative rate across all extracted + unmatched records: "
-                f"`{summary.pre_review_accuracy_overall:.1%}`).\n"
-                f"- **Post-Review Accuracy (`{post_acc_display}`):** Evaluates final reviewed values after human approval or edits "
-                f"(`{summary.post_denominator_label}`, overall rate: `{summary.post_review_accuracy_overall:.1%}`).\n"
-                f"- **Coverage (`{gt_cov_display}`):** Share of records with a verifiable SEC Company Facts reference "
+                f"- **Before Human Review (`{pre_acc_display}`):** Measures automated extraction before any analyst fixes "
+                f"(`{summary.pre_denominator_label}`, overall across all records: `{summary.pre_review_accuracy_overall:.1%}`).\n"
+                f"- **After Human Review (`{post_acc_display}`):** Measures final numbers after analyst sign-off and edits "
+                f"(`{summary.post_denominator_label}`, overall: `{summary.post_review_accuracy_overall:.1%}`).\n"
+                f"- **SEC Reference Coverage (`{gt_cov_display}`):** Share of figures with an official SEC comparison tag "
                 f"(`{summary.coverage_denominator_label}`)."
             )
 
@@ -1794,9 +1863,9 @@ def render_accuracy_report_page() -> None:
                     [
                         {
                             "Company": c.ticker or c.group_key,
-                            "Pre-Review Accuracy (%)": round((c.pre_review_accuracy_evaluable or 0.0) * 100.0, 2),
-                            "Post-Review Accuracy (%)": round((c.post_review_accuracy_evaluable or 0.0) * 100.0, 2),
-                            "GT Coverage (%)": round(c.ground_truth_coverage * 100.0, 2),
+                            "Before Review (%)": round((c.pre_review_accuracy_evaluable or 0.0) * 100.0, 2),
+                            "After Review (%)": round((c.post_review_accuracy_evaluable or 0.0) * 100.0, 2),
+                            "SEC Ref Coverage (%)": round(c.ground_truth_coverage * 100.0, 2),
                         }
                         for c in summary.by_company
                     ]
@@ -1813,16 +1882,18 @@ def render_accuracy_report_page() -> None:
                     color="Measure",
                     barmode="group",
                     color_discrete_map={
-                        "Pre-Review Accuracy (%)": "#1D4ED8",
-                        "Post-Review Accuracy (%)": "#059669",
-                        "GT Coverage (%)": "#64748B",
+                        "Before Review (%)": "#1E4B9A",
+                        "After Review (%)": "#0E5A3E",
+                        "SEC Ref Coverage (%)": "#596779",
                     },
                 )
-                fig_comp.update_yaxes(range=[0, 108])
+                fig_comp.update_xaxes(title=None)
+                fig_comp.update_yaxes(range=[0, 108], title="Accuracy / Coverage (%)")
                 render_plotly_chart(
                     fig_comp,
-                    title="Company-Level Pre vs. Post Accuracy & GT Coverage (%)",
+                    title="Company Accuracy: Before vs. After Human Review (%)",
                     key="acc_company_plotly",
+                    height=380,
                 )
 
         with chart_col2:
@@ -1831,8 +1902,8 @@ def render_accuracy_report_page() -> None:
                     [
                         {
                             "Metric": m.group_label,
-                            "Pre-Review Accuracy (%)": round((m.pre_review_accuracy_evaluable or 0.0) * 100.0, 2),
-                            "Post-Review Accuracy (%)": round((m.post_review_accuracy_evaluable or 0.0) * 100.0, 2),
+                            "Before Review (%)": round((m.pre_review_accuracy_evaluable or 0.0) * 100.0, 2),
+                            "After Review (%)": round((m.post_review_accuracy_evaluable or 0.0) * 100.0, 2),
                         }
                         for m in summary.by_metric
                     ]
@@ -1850,30 +1921,31 @@ def render_accuracy_report_page() -> None:
                     barmode="group",
                     orientation="h",
                     color_discrete_map={
-                        "Pre-Review Accuracy (%)": "#1D4ED8",
-                        "Post-Review Accuracy (%)": "#059669",
+                        "Before Review (%)": "#1E4B9A",
+                        "After Review (%)": "#0E5A3E",
                     },
                 )
-                fig_met.update_xaxes(range=[0, 108])
+                fig_met.update_xaxes(range=[0, 108], title="Accuracy (%)")
                 fig_met.update_yaxes(categoryorder="total ascending", title=None)
                 render_plotly_chart(
                     fig_met,
-                    title="Metric-Level Pre-Review vs. Post-Review Accuracy (%)",
+                    title="Line-Item Accuracy: Before vs. After Human Review (%)",
                     key="acc_metric_plotly",
+                    height=380,
                 )
 
-        st.markdown('<div class="fl-section-title">Company-Level Accuracy Breakdown</div>', unsafe_allow_html=True)
+        st.markdown('<div class="fl-section-title">Accuracy by Company</div>', unsafe_allow_html=True)
         render_status_table(
             headers=[
                 "Company",
                 "Total",
-                "Verifiable GT",
-                "GT Coverage",
-                "Pre-Review (Denom)",
-                "Pre Acc",
-                "Post-Review (Denom)",
-                "Post Acc",
-                "Human Fixed",
+                "With SEC Ref",
+                "SEC Coverage",
+                "Before Review",
+                "Before %",
+                "After Review",
+                "Final %",
+                "Analyst Fixed",
             ],
             rows=[
                 [
@@ -1890,20 +1962,21 @@ def render_accuracy_report_page() -> None:
                 for c in summary.by_company
             ],
             right_align_cols={1, 2, 3, 4, 5, 6, 7, 8},
+            min_width="780px",
         )
 
-        st.markdown('<div class="fl-section-title">Metric-Level Accuracy Breakdown</div>', unsafe_allow_html=True)
+        st.markdown('<div class="fl-section-title">Accuracy by Financial Metric</div>', unsafe_allow_html=True)
         render_status_table(
             headers=[
                 "Metric",
                 "Total",
-                "Verifiable GT",
-                "GT Coverage",
-                "Pre-Review (Denom)",
-                "Pre Acc",
-                "Post-Review (Denom)",
-                "Post Acc",
-                "Human Fixed",
+                "With SEC Ref",
+                "SEC Coverage",
+                "Before Review",
+                "Before %",
+                "After Review",
+                "Final %",
+                "Analyst Fixed",
             ],
             rows=[
                 [
@@ -1920,9 +1993,10 @@ def render_accuracy_report_page() -> None:
                 for m in summary.by_metric
             ],
             right_align_cols={1, 2, 3, 4, 5, 6, 7, 8},
+            min_width="780px",
         )
 
-        st.markdown('<div class="fl-section-title">SEC Company Facts Comparison & Reference Provenance</div>', unsafe_allow_html=True)
+        st.markdown('<div class="fl-section-title">Line-by-Line SEC Comparison</div>', unsafe_allow_html=True)
         detail_rows = []
         for e in evaluations:
             unit = e.get("unit") or "USD"
@@ -1949,36 +2023,37 @@ def render_accuracy_report_page() -> None:
             headers=[
                 "Company",
                 "Metric",
-                "Concept",
-                "Period",
+                "SEC Concept",
+                "Reporting Period",
                 "Unit",
-                "Pre-Review",
-                "Post-Review",
-                "SEC Ground Truth",
-                "Pre Abs Diff",
-                "Pre % Diff",
-                "Pre Status",
-                "Post Status",
+                "Before Review",
+                "Final Value",
+                "SEC Reference",
+                "Diff ($)",
+                "Diff (%)",
+                "Before Status",
+                "Final Status",
             ],
             rows=detail_rows,
             right_align_cols={5, 6, 7, 8, 9},
+            min_width="1120px",
         )
 
-        with st.expander("Reference Provenance & Explanations", expanded=False):
+        with st.expander("Official SEC Reference Links & Explanations", expanded=False):
             for e in evaluations:
                 st.markdown(
                     f"**{e.get('ticker') or e.get('cik')} • {e['metric_name']} (`{e['run_id']}`)** — "
-                    f"Source: `{e.get('reference_source_url') or 'N/A'}`  \n"
+                    f"SEC Link: `{e.get('reference_source_url') or 'N/A'}`  \n"
                     f"{e.get('explanation') or ''}"
                 )
 
-        st.markdown('<div class="fl-section-title">Export Branded FinovaLabs Reports</div>', unsafe_allow_html=True)
+        st.markdown('<div class="fl-section-title">Download Final Report Files</div>', unsafe_allow_html=True)
         exp_run_id = sel_run if sel_run != "ALL" else None
         dl1, dl2 = st.columns(2)
         with dl1:
             csv_data = build_accuracy_report_csv(evaluations, run_id=exp_run_id)
             st.download_button(
-                "Download FinovaLabs Accuracy CSV",
+                "Download Final Report (CSV for Excel)",
                 data=csv_data,
                 file_name=f"finovalabs_accuracy_{exp_run_id or 'all'}.csv",
                 mime="text/csv",
@@ -1987,7 +2062,7 @@ def render_accuracy_report_page() -> None:
         with dl2:
             json_data = build_accuracy_report_json(evaluations, run_id=exp_run_id)
             st.download_button(
-                "Download FinovaLabs Accuracy JSON",
+                "Download Final Report (JSON)",
                 data=json_data,
                 file_name=f"finovalabs_accuracy_{exp_run_id or 'all'}.json",
                 mime="application/json",
@@ -1995,22 +2070,21 @@ def render_accuracy_report_page() -> None:
             )
     else:
         render_empty_state(
-            title="No accuracy benchmark results yet",
+            title="No SEC comparison results yet",
             description=(
-                "Accuracy metrics compare raw automated extraction and final post-review values against "
-                "official SEC Company Facts XBRL entries with strict company, concept, fiscal period, "
-                "and unit checks."
+                "The Final SEC Report checks your initial and signed-off figures side-by-side against official "
+                "SEC data using strict company, fiscal-year, and unit matching."
             ),
-            badge_label="Awaiting Evaluation",
-            next_step="Click 'Evaluate vs. SEC Facts' above once a filing workflow has been executed.",
+            badge_label="Awaiting Verification",
+            next_step="Click 'Evaluate vs. SEC Facts' above once you have completed an extraction run.",
         )
 
     render_footer()
 
 
 def render_audit_trail_page() -> None:
-    """Render the tamper-evident Audit Trail ledger with SQL filters & decision history."""
-    settings, posture_summary = _bootstrap_page("Audit Trail", active_step=5)
+    """Render the plain-English Decision History & tamper-evident Audit Trail ledger."""
+    settings, posture_summary = _bootstrap_page("Decision History", active_step=5)
     if settings is None:
         render_footer()
         return
@@ -2026,15 +2100,15 @@ def render_audit_trail_page() -> None:
     failure_reason = verification[2] if verification else "Verification failed"
 
     render_page_header(
-        title="Audit Trail",
+        title="Decision History & Audit Trail",
         subtitle=(
-            "Inspect the chronological, filterable ledger of human review decisions "
-            "and workflow events protected by SHA-256 hash chaining."
+            "Review every analyst approval, correction, rejection, and audit milestone in chronological order, "
+            "showing Original vs. Corrected values and record integrity status."
         ),
         status_label=(
-            f"Chain Intact • {event_total} Events"
+            f"Records Verified • {event_total} Entries"
             if chain_valid
-            else "Chain Verification Alert"
+            else "Record Integrity Alert"
         ),
         status_tone="success" if chain_valid else "danger",
     )
@@ -2046,12 +2120,12 @@ def render_audit_trail_page() -> None:
     with aud_g1:
         render_next_action_box(
             next_action=(
-                "Use filters below (Company, UTC Date, Decision, Metric, Workflow ID) to narrow history, or click "
-                "'Re-Verify Audit Hash Chain' and 'Download Audit Ledger JSON'."
+                "Filter below by Company, Date, Decision, or Metric, or click 'Re-Verify Audit Hash Chain' "
+                "to confirm no earlier decision was altered or deleted."
             ),
             expected_result=(
-                "Verifies every sequential seq_id and SHA-256 link end-to-end, lists Original vs. Corrected values, "
-                "and exports complete compliance provenance."
+                "Confirms chronological record integrity, shows Original vs. Corrected amounts side-by-side, "
+                "and lets you export the complete compliance log as JSON."
             ),
         )
     with aud_g2:
@@ -2062,17 +2136,17 @@ def render_audit_trail_page() -> None:
     render_metric_cards(
         [
             {
-                "label": "Ledger Events",
+                "label": "Total Audit Entries",
                 "value": str(event_total),
-                "detail": "Append-only SQLite audit_events",
+                "detail": "Permanent chronological record",
             },
             {
-                "label": "Chain Integrity",
-                "value": "Verified" if chain_valid else "Tamper Detected",
-                "detail": failure_reason or "Sequential seq_id + SHA-256 verified",
+                "label": "Record Integrity Check",
+                "value": "Verified" if chain_valid else "Alert Detected",
+                "detail": failure_reason or "Sequential numbering & link check passed",
             },
             {
-                "label": "Human Decisions",
+                "label": "Analyst Decisions",
                 "value": str(len(human_event_rows) if human_event_rows else len(resolved_task_rows)),
                 "detail": (
                     f"{sum(1 for d in human_event_rows if (d.get('decision') or '') == 'CORRECTED')} corrected • "
@@ -2087,7 +2161,7 @@ def render_audit_trail_page() -> None:
                 ),
             },
             {
-                "label": "Log Destination",
+                "label": "Activity Log File",
                 "value": settings.logging.level,
                 "detail": str(settings.log_file),
             },
@@ -2097,12 +2171,12 @@ def render_audit_trail_page() -> None:
     btn_c1, btn_c2, btn_c3 = st.columns([1.4, 1.4, 1.2])
     with btn_c1:
         if st.button("Re-Verify Audit Hash Chain", type="primary", **stretch_width_kwargs(st.button)):
-            with st.spinner("Verifying sequential SHA-256 hash links..."):
+            with st.spinner("Verifying chronological record integrity..."):
                 recheck = safe_execute(verify_audit_chain, "manual hash-chain verification")
             if recheck and recheck[0]:
                 st.success(f"Cryptographic chain verified across {recheck[1]} event(s) (tamper-evident).")
             elif recheck:
-                st.error(f"Chain integrity error: {recheck[2]}")
+                st.error(f"Record integrity alert: {recheck[2]}")
     with btn_c2:
         ledger_json = json.dumps(
             {
@@ -2118,7 +2192,7 @@ def render_audit_trail_page() -> None:
             default=str,
         )
         st.download_button(
-            "Download Audit Ledger JSON",
+            "Download Full Audit Log (JSON)",
             data=ledger_json,
             file_name="finovalabs_audit_trail.json",
             mime="application/json",
@@ -2130,10 +2204,10 @@ def render_audit_trail_page() -> None:
             "filing-analysis",
             key="aud_go_fa",
             primary=False,
-            help_text="Start or inspect another company's 10-K audit workflow.",
+            help_text="Select a new company and download its 10-K filing.",
         )
 
-    # Interactive SQLite-backed filters: Company, Date (UTC), Decision, Metric, Workflow ID, Sort & Telemetry scope
+    # Interactive filters: Company, Date (UTC), Decision, Metric, Workflow ID, Sort & System detail scope
     company_opts = sorted({
         (ev.get("ticker") or ev.get("cik"))
         for ev in all_events
@@ -2161,41 +2235,41 @@ def render_audit_trail_page() -> None:
             "Decision",
             ["ALL", *decision_opts],
             key="audit_filter_decision",
-            help="Filter by human decision (APPROVED, CORRECTED, REJECTED) or system event type.",
+            help="Filter by analyst decision (APPROVED, CORRECTED, REJECTED) or audit milestone.",
         )
     with fc4:
         sel_metric = st.selectbox("Metric", ["ALL", *metric_opts], key="audit_filter_metric")
 
     fc5, fc6, fc7 = st.columns([1.2, 1.8, 1.0])
     with fc5:
-        sel_run_id = st.selectbox("Workflow Run ID", ["ALL", *run_ids], key="audit_run_id")
+        sel_run_id = st.selectbox("Audit Run ID", ["ALL", *run_ids], key="audit_run_id")
     with fc6:
         search_q = st.text_input(
-            "Search Reviewer / Session / Filing / Explanation",
+            "Search Analyst / Filing / Reason",
             value="",
             key="audit_search",
             placeholder="e.g., analyst, 0000320193, Net Income...",
         ).strip().lower()
     with fc7:
         sort_order = st.selectbox(
-            "Chronological Order",
+            "Sort Order",
             ["Newest First", "Oldest First"],
             key="audit_sort_order",
-            help="Order records by sequential ledger ID (`seq_id`) and UTC timestamp.",
+            help="Sort entries by record number and UTC timestamp.",
         )
 
     include_telemetry = st.checkbox(
-        "Include low-level automated system telemetry in full ledger table",
+        "Show detailed automated check entries in full history table",
         value=False,
         key="audit_include_telemetry",
         help=(
-            "When unchecked, the lower ledger highlights human decisions, workflow starts/completions, "
-            "accuracy runs, and checkpoint milestones while hiding repetitive per-metric system checks."
+            "When unchecked, the lower history table focuses on analyst sign-offs and major audit milestones "
+            "(started, paused, completed, SEC report generated)."
         ),
     )
 
     if len(all_events) >= 500:
-        st.caption("Showing the most recent 500 events loaded from SQLite. Export JSON or filter to narrow scope.")
+        st.caption("Showing the most recent 500 entries. Download JSON or apply filters to narrow results.")
 
     filtered_events = safe_execute(
         lambda: fetch_audit_events(
@@ -2236,7 +2310,7 @@ def render_audit_trail_page() -> None:
         if ev["event_type"] == "HUMAN_REVIEW_DECISION"
     ]
 
-    st.markdown('<div class="fl-section-title">Reviewer Decisions (Append-Only Decision History)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="fl-section-title">Analyst Decisions (Permanent Before &amp; After Log)</div>', unsafe_allow_html=True)
     if filtered_human_events:
         dec_rows = [
             [
@@ -2255,49 +2329,28 @@ def render_audit_trail_page() -> None:
         ]
         render_status_table(
             headers=[
-                "Seq #",
-                "Timestamp (UTC)",
-                "Reviewer / Session",
-                "Workflow ID",
+                "Record #",
+                "Time (UTC)",
+                "Analyst / Session",
+                "Audit ID",
                 "Company / Filing",
                 "Metric",
                 "Decision",
                 "Original Value",
                 "Corrected Value",
-                "Explanation",
+                "Reason",
             ],
             rows=dec_rows,
             right_align_cols={0, 7, 8},
         )
     else:
         render_empty_state(
-            title="No human review decisions match filters",
+            title="No analyst decisions match these filters",
             description=(
-                "Every human approval, correction, rejection, and subsequent amendment appends a permanent "
-                "record here with original and corrected values."
+                "Every human approval, correction, rejection, and follow-up amendment adds a permanent row "
+                "here showing both the original and updated figures."
             ),
             badge_label="No Decision Matches",
-        )
-
-    if filtered_events:
-        ev_counts: dict[str, int] = {}
-        for ev in filtered_events:
-            label = ev.get("decision") or ev["event_type"]
-            ev_counts[label] = ev_counts.get(label, 0) + 1
-        ev_df = pd.DataFrame(
-            [{"Decision / Event": k, "Count": v} for k, v in sorted(ev_counts.items())]
-        )
-        fig_ev = px.bar(
-            ev_df,
-            x="Decision / Event",
-            y="Count",
-            color_discrete_sequence=["#1D4ED8"],
-        )
-        render_plotly_chart(
-            fig_ev,
-            title="Filtered Audit Records by Decision / Event Type",
-            key="audit_events_plotly",
-            height=280,
         )
 
     milestone_types = {
@@ -2314,11 +2367,11 @@ def render_audit_trail_page() -> None:
         else [ev for ev in filtered_events if ev.get("event_type") in milestone_types]
     )
 
-    st.markdown('<div class="fl-section-title">Tamper-Evident Append-Only Audit Ledger</div>', unsafe_allow_html=True)
+    st.markdown('<div class="fl-section-title">Complete Chronological Audit History</div>', unsafe_allow_html=True)
     if not include_telemetry and sel_decision == "ALL" and len(filtered_events) > len(ledger_events):
         st.caption(
-            f"Showing {len(ledger_events)} milestone & decision event(s) ({len(filtered_events) - len(ledger_events)} "
-            "low-level automated telemetry records hidden — toggle checkbox above to inspect all)."
+            f"Showing {len(ledger_events)} key decision & milestone record(s) ({len(filtered_events) - len(ledger_events)} "
+            "routine automated check records hidden — check the box above to view every detail)."
         )
 
     if ledger_events:
@@ -2335,13 +2388,13 @@ def render_audit_trail_page() -> None:
                 f"{ev.get('reviewer_id') or ev['actor']} ({(ev.get('session_id') or '—')[:12]})",
                 ev.get("run_id") or "—",
                 f"{ev['event_hash'][:12]}…",
-                ("Linked", "success"),
+                ("Verified", "success"),
             ]
             for ev in ledger_events
         ]
         render_status_table(
             headers=[
-                "Seq #",
+                "Record #",
                 "UTC Time",
                 "Company",
                 "Filing",
@@ -2349,37 +2402,36 @@ def render_audit_trail_page() -> None:
                 "Decision",
                 "Original",
                 "Corrected",
-                "Reviewer / Session",
-                "Workflow ID",
-                "Hash",
+                "Analyst / Session",
+                "Audit ID",
+                "Integrity Link",
                 "Chain",
             ],
             rows=rows,
             right_align_cols={0, 6, 7},
         )
-        with st.expander("Inspect Event Payloads, Explanations & SHA-256 Chain Links", expanded=False):
+        with st.expander("Technical Provenance & Full Integrity Link Details", expanded=False):
             for ev in ledger_events[:50]:
                 st.markdown(
-                    f"**Seq #{ev.get('seq_id') or ev['event_id']} (`event_id={ev['event_id']}`) • "
+                    f"**Record #{ev.get('seq_id') or ev['event_id']} (`event_id={ev['event_id']}`) • "
                     f"{humanize_status(ev.get('decision') or ev['event_type'])}** (`{ev['created_at']}`) — "
                     f"Reviewer: `{ev.get('reviewer_id') or ev['actor']}` | Session: `{ev.get('session_id') or '—'}` | "
                     f"Company: `{ev.get('ticker') or ev.get('cik') or '—'}` | Filing: `{ev.get('accession_number') or '—'}` | "
-                    f"Metric: `{ev.get('metric_name') or '—'}` | Workflow: `{ev.get('run_id') or '—'}`  \n"
-                    f"Explanation: {ev.get('explanation') or '—'}  \n"
+                    f"Metric: `{ev.get('metric_name') or '—'}` | Audit ID: `{ev.get('run_id') or '—'}`  \n"
+                    f"Reason: {ev.get('explanation') or '—'}  \n"
                     f"Original Value: `{ev.get('original_value') or '—'}` | Corrected Value: `{ev.get('corrected_value') or '—'}`  \n"
                     f"Prev Hash: `{ev['prev_hash'][:16]}…` -> Event Hash: `{ev['event_hash'][:16]}…`"
                 )
                 st.code(ev["payload_json"], language="json")
     else:
         render_empty_state(
-            title="Audit ledger has no matching events",
+            title="No matching history records found",
             description=(
-                "The tamper-evident SHA-256 audit table is initialized and verified "
-                "in SQLite (tamper-evident, not absolutely tamper-proof). Events append "
-                "automatically as workflows decide, extract, validate, and capture human reviews."
+                "The tamper-evident SHA-256 audit ledger is ready (tamper-evident, not absolutely tamper-proof). "
+                "Events record automatically as you extract filings, verify checks, and sign off on reviews."
             ),
-            badge_label="Genesis State Verified" if not all_events else "No Filter Matches",
-            next_step="Adjust filters or enable low-level automated telemetry above.",
+            badge_label="History Ready" if not all_events else "No Filter Matches",
+            next_step="Adjust the filters above or enable detailed check entries.",
         )
 
     render_footer()
